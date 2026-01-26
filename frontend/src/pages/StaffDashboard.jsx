@@ -180,71 +180,114 @@ export default function StaffDashboard() {
     Object.entries(analytics.byClientType).map(([name, value]) => ({ name, value })) : [];
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#f8fafc',
-    }}>
-      {/* Header */}
+    <>
+      <style>{`
+        @media (max-width: 768px) {
+          .staff-dashboard-header {
+            flex-wrap: wrap;
+            gap: 12px;
+          }
+          .staff-dashboard-header > div:first-child {
+            width: 100%;
+            flex-direction: column;
+            align-items: flex-start !important;
+            gap: 8px !important;
+          }
+          .staff-dashboard-header-center {
+            width: 100%;
+            text-align: left;
+          }
+          .staff-dashboard-main-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .staff-dashboard-content {
+            padding: 16px !important;
+          }
+          .queue-item-grid {
+            grid-template-columns: 1fr !important;
+            gap: 12px !important;
+          }
+          .queue-item-buttons {
+            flex-direction: row !important;
+            width: 100% !important;
+          }
+          .queue-item-buttons button {
+            flex: 1;
+          }
+        }
+        @media (max-width: 1024px) and (min-width: 769px) {
+          .staff-dashboard-main-grid {
+            grid-template-columns: 60% 40% !important;
+          }
+        }
+      `}</style>
       <div style={{
-        background: 'white',
-        borderBottom: '1px solid #e2e8f0',
-        padding: '16px 24px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+        minHeight: '100vh',
+        background: '#f8fafc',
       }}>
-        <Logo size="small" />
-        {window && (
-          <div style={{ fontSize: '18px', fontWeight: '600', color: '#1e293b' }}>
-            Operating: {window.label}
-          </div>
-        )}
-        <StaffProfileDropdown
-          onProfileClick={handleProfileClick}
-          onLogout={handleLogout}
-        />
-      </div>
-
-      <div style={{
-        maxWidth: '1400px',
-        margin: '0 auto',
-        padding: '24px',
-      }}>
-        {/* Window Assignment */}
-        {!window && (
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            marginBottom: '24px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-          }}>
-            <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
-              Assign Window
-            </h2>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-              gap: '12px',
-            }}>
-              {windows.map((w) => (
-                <Button
-                  key={w.id}
-                  onClick={() => handleAssignWindow(w.id)}
-                  variant="outline"
-                >
-                  {w.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '75% 25%',
-          gap: '24px',
+        {/* Header */}
+        <div className="staff-dashboard-header" style={{
+          background: 'white',
+          borderBottom: '1px solid #e2e8f0',
+          padding: '16px 24px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
         }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flex: 1 }}>
+            <Logo size="small" />
+            {window && (
+              <div className="staff-dashboard-header-center" style={{ fontSize: '18px', fontWeight: '600', color: '#1e293b' }}>
+                Operating: {window.label}
+              </div>
+            )}
+          </div>
+          <StaffProfileDropdown
+            onProfileClick={handleProfileClick}
+            onLogout={handleLogout}
+          />
+        </div>
+
+        <div className="staff-dashboard-content" style={{
+          maxWidth: '1400px',
+          margin: '0 auto',
+          padding: '24px',
+        }}>
+          {/* Window Assignment */}
+          {!window && (
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '24px',
+              marginBottom: '24px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            }}>
+              <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
+                Assign Window
+              </h2>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                gap: '12px',
+              }}>
+                {windows.map((w) => (
+                  <Button
+                    key={w.id}
+                    onClick={() => handleAssignWindow(w.id)}
+                    variant="outline"
+                  >
+                    {w.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="staff-dashboard-main-grid" style={{
+            display: 'grid',
+            gridTemplateColumns: '75% 25%',
+            gap: '24px',
+          }}>
           {/* Queue List - First Column (75%) */}
           <div style={{
             background: 'white',
@@ -430,7 +473,8 @@ export default function StaffDashboard() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -438,18 +482,18 @@ function QueueItem({ entry, onServe, onComplete, onSkip }) {
   const isServing = entry.status === 'NOW_SERVING';
 
   return (
-    <div style={{
+    <div className="queue-item-grid" style={{
       padding: '16px',
       border: isServing ? '2px solid #2563eb' : '1px solid #e2e8f0',
       borderRadius: '8px',
       marginBottom: '12px',
       background: isServing ? '#eff6ff' : 'white',
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
+      display: 'grid',
+      gridTemplateColumns: '1fr auto',
       gap: '20px',
+      alignItems: 'start',
     }}>
-      <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+      <div>
         <div style={{
           fontSize: '18px',
           fontWeight: '700',
@@ -472,19 +516,17 @@ function QueueItem({ entry, onServe, onComplete, onSkip }) {
           Joined: {new Date(entry.joinedAt).toLocaleTimeString()}
         </div>
       </div>
-      <div style={{ 
+      <div className="queue-item-buttons" style={{ 
         display: 'flex', 
         gap: '8px', 
-        flexDirection: 'column', 
-        flexShrink: 0,
-        width: '150px',
+        flexDirection: 'column',
       }}>
         {!isServing ? (
           <Button
             variant="primary"
             icon={Play}
             onClick={() => onServe(entry.id)}
-            style={{ fontSize: '12px', padding: '8px 16px', whiteSpace: 'nowrap', width: '100%' }}
+            style={{ fontSize: '12px', padding: '8px 16px', whiteSpace: 'nowrap' }}
           >
             Start Serving
           </Button>
@@ -493,7 +535,7 @@ function QueueItem({ entry, onServe, onComplete, onSkip }) {
             variant="success"
             icon={CheckCircle}
             onClick={() => onComplete(entry.id)}
-            style={{ fontSize: '12px', padding: '8px 16px', whiteSpace: 'nowrap', width: '100%' }}
+            style={{ fontSize: '12px', padding: '8px 16px', whiteSpace: 'nowrap' }}
           >
             Mark as Served
           </Button>
@@ -502,7 +544,7 @@ function QueueItem({ entry, onServe, onComplete, onSkip }) {
           variant="danger"
           icon={SkipForward}
           onClick={() => onSkip(entry.id)}
-          style={{ fontSize: '12px', padding: '8px 16px', whiteSpace: 'nowrap', width: '100%' }}
+          style={{ fontSize: '12px', padding: '8px 16px', whiteSpace: 'nowrap' }}
         >
           Skip
         </Button>

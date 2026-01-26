@@ -168,32 +168,103 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
-      <InputDialog {...inputDialog} />
-      {/* Header */}
-      <div style={{
-        background: 'white',
-        borderBottom: '1px solid #e2e8f0',
-        padding: '16px 24px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}>
-        <Logo size="small" />
-        <h1 style={{ fontSize: '24px', fontWeight: '700', color: '#1e293b' }}>
-          Admin Dashboard
-        </h1>
-        <AdminProfileDropdown onLogout={handleLogout} />
-      </div>
+    <>
+      <style>{`
+        @media (max-width: 768px) {
+          .admin-dashboard-header {
+            flex-wrap: wrap;
+            gap: 12px;
+          }
+          .admin-dashboard-header > div:first-child {
+            width: 100%;
+            flex-direction: column;
+            align-items: flex-start !important;
+            gap: 8px !important;
+          }
+          .admin-dashboard-header h1 {
+            font-size: 20px !important;
+          }
+          .admin-dashboard-tabs {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 0 16px !important;
+          }
+          .admin-dashboard-tabs button {
+            white-space: nowrap;
+            font-size: 13px;
+            padding: 10px 16px !important;
+          }
+          .admin-dashboard-tabs button span {
+            display: none;
+          }
+          .admin-dashboard-content {
+            padding: 16px !important;
+          }
+          .admin-stats-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .admin-stats-grid-4 {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .admin-cards-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .admin-reports-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .admin-filter-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .admin-page-header {
+            flex-direction: column;
+            align-items: flex-start !important;
+            gap: 12px;
+          }
+        }
+        @media (max-width: 480px) {
+          .admin-stats-grid,
+          .admin-stats-grid-4,
+          .admin-cards-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+        @media (max-width: 1024px) and (min-width: 769px) {
+          .admin-stats-grid-4 {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .admin-cards-grid {
+            grid-template-columns: repeat(3, 1fr) !important;
+          }
+        }
+      `}</style>
+      <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
+        <InputDialog {...inputDialog} />
+        {/* Header */}
+        <div className="admin-dashboard-header" style={{
+          background: 'white',
+          borderBottom: '1px solid #e2e8f0',
+          padding: '16px 24px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flex: 1 }}>
+            <Logo size="small" />
+            <h1 style={{ fontSize: '24px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
+              Admin Dashboard
+            </h1>
+          </div>
+          <AdminProfileDropdown onLogout={handleLogout} />
+        </div>
 
-      {/* Tabs */}
-      <div style={{
-        background: 'white',
-        borderBottom: '1px solid #e2e8f0',
-        padding: '0 24px',
-        display: 'flex',
-        gap: '4px',
-      }}>
+        {/* Tabs */}
+        <div className="admin-dashboard-tabs" style={{
+          background: 'white',
+          borderBottom: '1px solid #e2e8f0',
+          padding: '0 24px',
+          display: 'flex',
+          gap: '4px',
+        }}>
         {[
           { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
           { id: 'staff', label: 'Staff', icon: Users },
@@ -243,7 +314,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Content */}
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '24px' }}>
+      <div className="admin-dashboard-content" style={{ maxWidth: '1400px', margin: '0 auto', padding: '24px' }}>
         {activeTab === 'dashboard' && <DashboardTab stats={dashboardStats} />}
         {activeTab === 'staff' && (
           <StaffTab
@@ -290,6 +361,7 @@ export default function AdminDashboard() {
         )}
       </div>
     </div>
+    </>
   );
 }
 
@@ -344,7 +416,7 @@ function DashboardTab({ stats }) {
       </div>
 
       {/* Stats Cards - Row 1 */}
-      <div style={{
+      <div className="admin-stats-grid-4" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
         gap: '16px',
@@ -377,7 +449,7 @@ function DashboardTab({ stats }) {
       </div>
 
       {/* Stats Cards - Row 2 */}
-      <div style={{
+      <div className="admin-stats-grid-4" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
         gap: '16px',
@@ -540,7 +612,7 @@ function StaffTab({ staff, categories, onRefresh, form, setForm, setInputDialog 
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
+      <div className="admin-page-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
         <h2 style={{ fontSize: '20px', fontWeight: '600' }}>Staff Management</h2>
         <Button onClick={() => {
           setForm({ open: true, data: {} });
@@ -781,19 +853,10 @@ function StaffTab({ staff, categories, onRefresh, form, setForm, setInputDialog 
         document.body
       )}
 
-      <div style={{
+      <div className="admin-cards-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
         gap: '16px',
-        '@media (max-width: 1200px)': {
-          gridTemplateColumns: 'repeat(3, 1fr)',
-        },
-        '@media (max-width: 900px)': {
-          gridTemplateColumns: 'repeat(2, 1fr)',
-        },
-        '@media (max-width: 600px)': {
-          gridTemplateColumns: '1fr',
-        },
       }}>
         {staff.map((s) => {
           const initials = s.name ? s.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : s.username.charAt(0).toUpperCase();
@@ -1052,7 +1115,7 @@ function WindowsTab({ windows, onRefresh, form, setForm }) {
   return (
     <div>
       <ConfirmDialog {...confirmDialog} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
+      <div className="admin-page-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
         <h2 style={{ fontSize: '20px', fontWeight: '600' }}>Window Management</h2>
         <Button 
           icon={Plus}
@@ -1152,7 +1215,7 @@ function WindowsTab({ windows, onRefresh, form, setForm }) {
         document.body
       )}
 
-      <div style={{
+      <div className="admin-cards-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
         gap: '16px',
@@ -1378,7 +1441,7 @@ function CategoriesTab({ categories, onRefresh, categoryForm, setCategoryForm, s
   return (
     <div>
       <ConfirmDialog {...confirmDialog} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
+      <div className="admin-page-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
         <h2 style={{ fontSize: '20px', fontWeight: '600' }}>Category Management</h2>
         <Button 
           icon={Plus}
@@ -1475,7 +1538,88 @@ function CategoriesTab({ categories, onRefresh, categoryForm, setCategoryForm, s
         document.body
       )}
 
-      <div style={{
+      {subCategoryForm.open && ReactDOM.createPortal(
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+        }} onClick={() => {
+          setSubCategoryForm({ open: false, data: {} });
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '12px',
+            padding: '24px',
+            maxWidth: '500px',
+            width: '90%',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '20px',
+            }}>
+              <h3 style={{ fontSize: '20px', fontWeight: '600', margin: 0 }}>
+                Add Subcategory
+              </h3>
+              <button
+                onClick={() => {
+                  setSubCategoryForm({ open: false, data: {} });
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  color: '#64748b',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleCreateSubCategory}>
+              <Input
+                label="Subcategory Name"
+                value={subCategoryForm.data.name || ''}
+                onChange={(e) => setSubCategoryForm({ ...subCategoryForm, data: { ...subCategoryForm.data, name: e.target.value } })}
+                required
+              />
+              <Input
+                label="Description (Optional)"
+                value={subCategoryForm.data.description || ''}
+                onChange={(e) => setSubCategoryForm({ ...subCategoryForm, data: { ...subCategoryForm.data, description: e.target.value } })}
+              />
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <Button 
+                  variant="outline" 
+                  icon={X}
+                  onClick={() => {
+                    setSubCategoryForm({ open: false, data: {} });
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" icon={Check}>
+                  Create
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      <div className="admin-cards-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
         gap: '16px',
@@ -1535,8 +1679,79 @@ function CategoriesTab({ categories, onRefresh, categoryForm, setCategoryForm, s
               </div>
             )}
 
+            {/* Subcategories List */}
+            {cat.subCategories && cat.subCategories.length > 0 && (
+              <div style={{ 
+                width: '100%', 
+                marginBottom: '8px',
+                maxHeight: '120px',
+                overflowY: 'auto',
+                padding: '8px',
+                background: '#f8fafc',
+                borderRadius: '8px',
+              }}>
+                {cat.subCategories.map((subCat) => (
+                  <div key={subCat.id} style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '6px 8px',
+                    marginBottom: '4px',
+                    background: 'white',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                  }}>
+                    <span style={{ fontWeight: '500', color: '#1e293b' }}>
+                      {subCat.name}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteSubCategory(subCat.id)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#ef4444',
+                        cursor: 'pointer',
+                        padding: '2px 6px',
+                        fontSize: '12px',
+                        borderRadius: '4px',
+                      }}
+                      onMouseOver={(e) => {
+                        e.target.style.background = '#fee2e2';
+                      }}
+                      onMouseOut={(e) => {
+                        e.target.style.background = 'transparent';
+                      }}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: 'auto', width: '100%' }}>
+              <Button
+                variant="outline"
+                icon={Plus}
+                onClick={() => {
+                  setSubCategoryForm({
+                    open: true,
+                    data: {
+                      categoryId: cat.id,
+                      name: '',
+                      description: '',
+                    },
+                  });
+                }}
+                style={{ 
+                  fontSize: '12px', 
+                  padding: '6px 12px',
+                  width: '100%',
+                }}
+              >
+                Add Subcategory
+              </Button>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   onClick={() => {
@@ -1683,7 +1898,7 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      <div className="admin-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <h2 style={{ fontSize: '20px', fontWeight: '600' }}>Reports & Analytics</h2>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           {hasActiveFilters && (
@@ -1782,7 +1997,7 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
               </button>
             </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>
+          <div className="admin-filter-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>
             {/* Date Range */}
             <div>
               <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: '500' }}>
@@ -2263,7 +2478,7 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
         <StatCard label="Average Duration" value={`${Math.floor((reports.averageDuration || 0) / 60)}m ${(reports.averageDuration || 0) % 60}s`} />
       </div>
 
-      <div style={{
+      <div className="admin-reports-grid" style={{
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
         gap: '24px',
