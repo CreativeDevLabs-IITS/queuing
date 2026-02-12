@@ -3509,7 +3509,7 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
                     setResetQueueConfirm({ open: false });
                     setResettingQueue(true);
                     try {
-                      await api.post('/admin/reset-queue-stats');
+                      await api.post('/admin/settings/reset-queue-stats');
                       toastSuccess('Queue stats reset successfully.');
                     } catch (error) {
                       toastError(error.response?.data?.error || 'Failed to reset queue stats');
