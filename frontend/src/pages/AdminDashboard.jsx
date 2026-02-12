@@ -313,7 +313,7 @@ export default function AdminDashboard() {
               Admin Dashboard
             </h1>
           </div>
-          <AdminProfileDropdown onLogout={handleLogout} />
+          <AdminProfileDropdown onProfileClick={() => navigate('/admin/profile')} onLogout={handleLogout} />
         </div>
 
         {/* Tabs */}
@@ -2700,9 +2700,6 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
   const [activeVoiceId, setActiveVoiceId] = useState('');
   const [savingVoices, setSavingVoices] = useState(false);
 
-  // TTS announcement template
-  const [announcementTemplate, setAnnouncementTemplate] = useState('');
-  const [savingAnnouncementTemplate, setSavingAnnouncementTemplate] = useState(false);
 
   // Video folder state
   const [videoFolderPath, setVideoFolderPath] = useState('');
@@ -2717,7 +2714,6 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
     loadCurrentLogo();
     loadCurrentDing();
     loadTtsVoices();
-    loadAnnouncementTemplate();
     loadVideoFolderPath();
   }, []);
 
@@ -2765,16 +2761,6 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
     }
   };
 
-  const loadAnnouncementTemplate = async () => {
-    try {
-      const res = await api.get('/admin/settings/tts-announcement');
-      if (res.data.template) {
-        setAnnouncementTemplate(res.data.template);
-      }
-    } catch (error) {
-      console.error('Failed to load TTS announcement template:', error);
-    }
-  };
 
   const loadVideoFolderPath = async () => {
     try {
@@ -3012,25 +2998,6 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
     }
   };
 
-  const handleSaveAnnouncementTemplate = async (e) => {
-    e.preventDefault();
-    const value = (announcementTemplate || '').trim();
-    if (!value) {
-      toastError('Announcement template cannot be empty');
-      return;
-    }
-
-    setSavingAnnouncementTemplate(true);
-    try {
-      await api.post('/admin/settings/tts-announcement', { template: value });
-      toastSuccess('Announcement template updated successfully!');
-    } catch (error) {
-      console.error('Failed to save announcement template:', error);
-      toastError(error.response?.data?.error || 'Failed to save announcement template');
-    } finally {
-      setSavingAnnouncementTemplate(false);
-    }
-  };
 
   if (loading) {
     return <Loading />;
@@ -3246,53 +3213,6 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
                 </Button>
               )}
             </div>
-        </form>
-          </div>
-
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-            borderTop: '3px solid #0ea5e9',
-          }}>
-        <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
-          Announcement Message Template
-        </h3>
-        <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '12px' }}>
-          Control what the voice will say when announcing a new client. You can use the following
-          placeholders, which will be replaced automatically:
-        </p>
-        <ul style={{ fontSize: '13px', color: '#64748b', marginBottom: '16px', paddingLeft: '20px' }}>
-          <li><code style={{ fontFamily: 'monospace' }}>{"{{window}}"}</code> — window label (e.g. Window 1)</li>
-          <li><code style={{ fontFamily: 'monospace' }}>{"{{queueNumber}}"}</code> — queue number counter (e.g. 6)</li>
-          <li><code style={{ fontFamily: 'monospace' }}>{"{{clientName}}"}</code> — client name (may be empty)</li>
-          <li><code style={{ fontFamily: 'monospace' }}>{"{{clientNamePart}}"}</code> — expands to <code>, or client name John Doe</code> when a name exists, or nothing otherwise</li>
-        </ul>
-
-        <form onSubmit={handleSaveAnnouncementTemplate}>
-          <textarea
-            value={announcementTemplate}
-            onChange={(e) => setAnnouncementTemplate(e.target.value)}
-            rows={3}
-            style={{
-              width: '100%',
-              padding: '12px 14px',
-              borderRadius: '8px',
-              border: '2px solid #e2e8f0',
-              fontSize: '14px',
-              fontFamily: 'monospace',
-              resize: 'vertical',
-              boxSizing: 'border-box',
-            }}
-            placeholder='Window {{window}} will now serve queue number {{queueNumber}}{{clientNamePart}}.'
-          />
-
-          <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
-            <Button type="submit" disabled={savingAnnouncementTemplate}>
-              {savingAnnouncementTemplate ? 'Saving Template...' : 'Save Template'}
-            </Button>
-          </div>
         </form>
           </div>
 

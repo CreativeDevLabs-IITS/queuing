@@ -24,6 +24,8 @@ export default function StaffDashboard() {
   const [analytics, setAnalytics] = useState(null);
   const [dateRange, setDateRange] = useState('today');
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
+  const [skipConfirm, setSkipConfirm] = useState({ open: false, queueEntryId: null });
+  const [servingId, setServingId] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -113,9 +115,16 @@ export default function StaffDashboard() {
   };
 
   const handleServe = async (queueEntryId) => {
+    if (servingId) return;
+    setServingId(queueEntryId);
     try {
-      await api.post(`/staff/serve/${queueEntryId}`);
-      loadDashboard();
+      const res = await api.post(`/staff/serve/${queueEntryId}`);
+      const updatedEntry = res.data?.queueEntry;
+      if (updatedEntry) {
+        setQueue((prev) => prev.map((e) => (e.id === queueEntryId ? updatedEntry : e)));
+      } else {
+        loadDashboard();
+      }
     } catch (error) {
       console.error('Failed to start serving:', error);
       if (error.response?.status === 409) {
@@ -124,6 +133,8 @@ export default function StaffDashboard() {
       } else {
         toastError(error.response?.data?.error || 'Failed to start serving');
       }
+    } finally {
+      setServingId(null);
     }
   };
 
@@ -138,15 +149,23 @@ export default function StaffDashboard() {
     }
   };
 
-  const handleSkip = async (queueEntryId) => {
-    if (!window.confirm('Mark this client as skipped?')) return;
-    
+  const handleSkipClick = (queueEntryId) => {
+    setSkipConfirm({ open: true, queueEntryId });
+  };
+
+  const handleSkipConfirm = async () => {
+    const { queueEntryId } = skipConfirm;
+    setSkipConfirm({ open: false, queueEntryId: null });
+    if (!queueEntryId) return;
+
     try {
       await api.post(`/staff/skip/${queueEntryId}`);
       loadDashboard();
+      loadAnalytics();
+      toastSuccess('Client marked as skipped');
     } catch (error) {
       console.error('Failed to skip:', error);
-      alert(error.response?.data?.error || 'Failed to skip');
+      toastError(error.response?.data?.error || 'Failed to skip');
     }
   };
 
@@ -208,6 +227,16 @@ export default function StaffDashboard() {
 
   return (
     <>
+      <ConfirmDialog
+        open={skipConfirm.open}
+        title="Skip Client"
+        message="Mark this client as skipped? They will be removed from the queue and not counted as served."
+        confirmText="Skip"
+        cancelText="Cancel"
+        variant="warning"
+        onConfirm={handleSkipConfirm}
+        onCancel={() => setSkipConfirm({ open: false, queueEntryId: null })}
+      />
       <style>{`
         .staff-dashboard-root {
           padding-left: env(safe-area-inset-left);
@@ -382,7 +411,8 @@ export default function StaffDashboard() {
                     entry={entry}
                     onServe={handleServe}
                     onComplete={handleComplete}
-                    onSkip={handleSkip}
+                    onSkip={handleSkipClick}
+                    servingId={servingId}
                   />
                 ))}
               </div>
@@ -406,7 +436,8 @@ export default function StaffDashboard() {
                     entry={entry}
                     onServe={handleServe}
                     onComplete={handleComplete}
-                    onSkip={handleSkip}
+                    onSkip={handleSkipClick}
+                    servingId={servingId}
                   />
                 ))}
               </div>
@@ -459,6 +490,19 @@ export default function StaffDashboard() {
                 </div>
                 <div style={{ fontSize: '32px', fontWeight: '700', color: '#2563eb' }}>
                   {stats.totalServed || 0}
+                </div>
+              </div>
+              <div style={{
+                background: 'white',
+                borderRadius: '12px',
+                padding: '20px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              }}>
+                <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '8px' }}>
+                  Skipped Today
+                </div>
+                <div style={{ fontSize: '32px', fontWeight: '700', color: '#ef4444' }}>
+                  {stats.totalSkipped || 0}
                 </div>
               </div>
             </div>
@@ -545,8 +589,9 @@ export default function StaffDashboard() {
   );
 }
 
-function QueueItem({ entry, onServe, onComplete, onSkip }) {
+function QueueItem({ entry, onServe, onComplete, onSkip, servingId }) {
   const isServing = entry.status === 'NOW_SERVING';
+  const isActionInProgress = servingId === entry.id;
 
   return (
     <div className="queue-item-grid" style={{
@@ -593,9 +638,10 @@ function QueueItem({ entry, onServe, onComplete, onSkip }) {
             variant="primary"
             icon={Play}
             onClick={() => onServe(entry.id)}
+            disabled={isActionInProgress}
             style={{ fontSize: '12px', padding: '8px 16px', whiteSpace: 'nowrap' }}
           >
-            Start Serving
+            {isActionInProgress ? 'Serving...' : 'Start Serving'}
           </Button>
         ) : (
           <Button

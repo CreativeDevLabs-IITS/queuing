@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, KeyRound, Key, Save, X, Monitor } from 'lucide-react';
 import api, { getStoredUser } from '../utils/api';
 import Input from '../components/Input';
 import Button from '../components/Button';
+import Select from '../components/Select';
 import Loading from '../components/Loading';
 import Logo from '../components/Logo';
 import { toastSuccess, toastError } from '../components/Toast';
@@ -21,6 +23,10 @@ export default function StaffProfile() {
     confirmPassword: '',
   });
   const [changingPassword, setChangingPassword] = useState(false);
+  const [currentWindow, setCurrentWindow] = useState(null);
+  const [windows, setWindows] = useState([]);
+  const [selectedWindowId, setSelectedWindowId] = useState('');
+  const [switchingWindow, setSwitchingWindow] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -38,6 +44,9 @@ export default function StaffProfile() {
       const res = await api.get('/staff/profile');
       setStaff(res.data.staff);
       setProfilePicture(res.data.staff.profilePicture);
+      const win = res.data.currentWindow || null;
+      setCurrentWindow(win);
+      setSelectedWindowId(win?.id || '');
     } catch (error) {
       console.error('Failed to load profile:', error);
       if (error.response?.status === 401) {
@@ -45,6 +54,41 @@ export default function StaffProfile() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadWindows = async () => {
+    try {
+      const res = await api.get('/windows/active');
+      setWindows(res.data.windows || []);
+    } catch (error) {
+      console.error('Failed to load windows:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadWindows();
+  }, []);
+
+  const handleSwitchWindow = async (e) => {
+    e.preventDefault();
+    if (!selectedWindowId || selectedWindowId === currentWindow?.id) {
+      if (selectedWindowId === currentWindow?.id) {
+        toastError('You are already assigned to this window');
+      }
+      return;
+    }
+    setSwitchingWindow(true);
+    try {
+      await api.post('/staff/assign-window', { windowId: selectedWindowId });
+      const newWindow = windows.find((w) => w.id === selectedWindowId);
+      setCurrentWindow(newWindow ? { id: newWindow.id, label: newWindow.label } : null);
+      toastSuccess('Window changed successfully. You are now operating at ' + (newWindow?.label || 'the selected window') + '.');
+    } catch (error) {
+      console.error('Failed to switch window:', error);
+      toastError(error.response?.data?.error || 'Failed to switch window');
+    } finally {
+      setSwitchingWindow(false);
     }
   };
 
@@ -191,7 +235,7 @@ export default function StaffProfile() {
         alignItems: 'center',
       }}>
         <Logo size="small" />
-        <Button variant="outline" onClick={() => navigate('/staff/dashboard')}>
+        <Button variant="outline" icon={ArrowLeft} onClick={() => navigate('/staff/dashboard')}>
           Back to Dashboard
         </Button>
       </div>
@@ -283,15 +327,16 @@ export default function StaffProfile() {
               label="Username"
               value={staff?.username || ''}
               disabled
-              style={{ background: '#f1f5f9' }}
+              readOnly
             />
 
             <div className="staff-profile-buttons" style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-              <Button type="submit" disabled={saving} fullWidth>
+              <Button type="submit" icon={Save} disabled={saving} fullWidth>
                 {saving ? 'Saving...' : 'Save Changes'}
               </Button>
               <Button
                 variant="outline"
+                icon={X}
                 onClick={() => navigate('/staff/dashboard')}
                 fullWidth
               >
@@ -299,6 +344,51 @@ export default function StaffProfile() {
               </Button>
             </div>
           </form>
+
+          {/* Operating window / Switch window */}
+          <div style={{
+            marginTop: '32px',
+            paddingTop: '32px',
+            borderTop: '1px solid #e2e8f0',
+          }}>
+            <h3 style={{
+              fontSize: '18px',
+              fontWeight: '600',
+              color: '#1e293b',
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}>
+              <Monitor size={20} />
+              Operating window
+            </h3>
+            <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '12px' }}>
+              {currentWindow ? `You are currently at ${currentWindow.label}.` : 'You are not assigned to a window yet.'}
+            </p>
+            <form onSubmit={handleSwitchWindow} style={{ display: 'flex', flexDirection: 'row', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap', maxWidth: '420px' }}>
+              <div style={{ flex: '1 1 200px' }}>
+                <Select
+                  label="Switch to window"
+                  value={selectedWindowId}
+                  onChange={(e) => setSelectedWindowId(e.target.value)}
+                >
+                  <option value="">— Select window —</option>
+                  {windows.map((w) => (
+                    <option key={w.id} value={w.id}>{w.label}</option>
+                  ))}
+                </Select>
+              </div>
+              <Button
+                type="submit"
+                icon={Monitor}
+                disabled={switchingWindow || !selectedWindowId || selectedWindowId === currentWindow?.id}
+                style={{ flexShrink: 0 }}
+              >
+                {switchingWindow ? 'Switching...' : 'Switch window'}
+              </Button>
+            </form>
+          </div>
 
           {/* Password Change Section */}
           <div style={{
@@ -321,6 +411,7 @@ export default function StaffProfile() {
               </h3>
               <Button
                 variant="outline"
+                icon={KeyRound}
                 onClick={() => {
                   setShowPasswordChange(!showPasswordChange);
                   if (showPasswordChange) {
@@ -370,6 +461,7 @@ export default function StaffProfile() {
                 />
                 <Button
                   type="submit"
+                  icon={Key}
                   disabled={changingPassword}
                   fullWidth
                   style={{ marginTop: '16px' }}

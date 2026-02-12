@@ -16,13 +16,17 @@ export default function PublicMonitoring() {
   const hasAnnouncedOnceRef = useRef(false);
   const announcementQueueRef = useRef([]);
   const isProcessingAnnouncementRef = useRef(false);
+  const lastAnnouncedKeyRef = useRef(null);
+  const lastAnnouncedTimeRef = useRef(0);
+  const COLLISION_WINDOW_MS = 8000;
   const [dingSoundUrl, setDingSoundUrl] = useState(null);
-  const [announcementTemplate, setAnnouncementTemplate] = useState('');
+  const dingSoundUrlRef = useRef(null);
+  const audioUnlockedRef = useRef(false);
+  const audioContextRef = useRef(null);
 
   useEffect(() => {
     loadData();
     loadDingSound();
-    loadAnnouncementTemplate();
     const interval = setInterval(loadData, 2000); // Poll every 2 seconds
     return () => clearInterval(interval);
   }, []);
@@ -78,16 +82,18 @@ export default function PublicMonitoring() {
       const res = await api.get('/queue/public/windows');
       const newWindows = res.data.windows || [];
 
-      // Trigger text-to-speech announcements for any changes in "now serving"
-      try {
-        handleNowServingAnnouncements(previousWindowsRef.current, newWindows);
-      } catch (announceError) {
-        // Fail silently if speech synthesis is not available or any other error occurs
-        console.error('Failed to run TTS announcements:', announceError);
-      }
-
+      // Defer TTS to next tick to avoid blocking main thread (can cause browser freeze)
+      const prev = previousWindowsRef.current;
       setWindows(newWindows);
       previousWindowsRef.current = newWindows;
+
+      setTimeout(() => {
+        try {
+          handleNowServingAnnouncements(prev, newWindows);
+        } catch (announceError) {
+          console.error('Failed to run TTS announcements:', announceError);
+        }
+      }, 0);
     } catch (error) {
       console.error('Failed to load windows:', error);
     } finally {
@@ -98,94 +104,320 @@ export default function PublicMonitoring() {
   const loadDingSound = async () => {
     try {
       const res = await api.get('/admin/settings/ding-sound');
-      setDingSoundUrl(res.data.dingSoundUrl || null);
+      const url = res.data.dingSoundUrl || null;
+      setDingSoundUrl(url);
+      dingSoundUrlRef.current = url;
     } catch (error) {
       console.error('Failed to load ding sound URL:', error);
       setDingSoundUrl(null);
+      dingSoundUrlRef.current = null;
     }
   };
 
-  const loadAnnouncementTemplate = async () => {
-    try {
-      const res = await api.get('/admin/settings/tts-announcement');
-      if (res.data.template) {
-        setAnnouncementTemplate(res.data.template);
-      }
-    } catch (error) {
-      console.error('Failed to load TTS announcement template:', error);
-    }
-  };
 
   const playDing = (onDone) => {
     // Safety: max wait before TTS, even if audio events fail
     const MAX_WAIT_MS = 7000;
 
     if (typeof window === 'undefined') {
+      console.log('playDing: window undefined');
       if (onDone) setTimeout(onDone, MAX_WAIT_MS);
       return;
     }
 
+    console.log('playDing: starting');
     let done = false;
+    let ultimateTimeoutId = null;
+    
+    // Ultimate safety: ensure safeDone is called within MAX_WAIT_MS no matter what
+    ultimateTimeoutId = setTimeout(() => {
+      if (!done) {
+        console.warn('playDing: Ultimate timeout reached, forcing safeDone');
+        done = true;
+        if (onDone) {
+          try {
+            onDone();
+          } catch (err) {
+            console.error('playDing: Error in onDone callback:', err);
+          }
+        }
+      }
+    }, MAX_WAIT_MS);
+    
     const safeDone = () => {
-      if (done) return;
+      if (done) {
+        console.log('playDing: safeDone called but already done');
+        return;
+      }
       done = true;
-      if (onDone) onDone();
+      if (ultimateTimeoutId) {
+        clearTimeout(ultimateTimeoutId);
+        ultimateTimeoutId = null;
+      }
+      console.log('playDing: done - calling onDone callback');
+      if (onDone) {
+        try {
+          onDone();
+        } catch (err) {
+          console.error('playDing: Error in onDone callback:', err);
+        }
+      } else {
+        console.warn('playDing: No onDone callback provided');
+      }
     };
 
     try {
-      // Prefer the uploaded MP3 ding if configured
-      if (dingSoundUrl) {
-        const audio = new Audio(dingSoundUrl);
+      // Prefer the uploaded MP3 ding if configured (use ref so we always have latest URL)
+      const dingUrl = dingSoundUrlRef.current || dingSoundUrl;
+      if (dingUrl && typeof dingUrl === 'string') {
+        const url = dingUrl.startsWith('http') ? dingUrl : `${window.location.origin}${dingUrl.startsWith('/') ? '' : '/'}${dingUrl}`;
+        console.log('playDing: Using custom ding sound:', url);
+        const audio = new Audio(url);
         audio.volume = 1.0;
+        let customDingPlayed = false;
 
-        audio.addEventListener('ended', safeDone);
-        audio.addEventListener('error', (err) => {
+        const tryFallbackChime = () => {
+          if (done) return;
+          console.log('playDing: Trying synthesized chime fallback');
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (!AudioCtx) {
+            console.warn('playDing: No AudioContext available');
+            safeDone();
+            return;
+          }
+          
+          let ctx = audioContextRef.current;
+          if (!ctx) {
+            try {
+              ctx = new AudioCtx();
+              // Check if context is usable
+              if (ctx.state === 'suspended') {
+                // Context created but suspended - will need resume
+                audioContextRef.current = ctx;
+              } else {
+                audioContextRef.current = ctx;
+              }
+            } catch (createErr) {
+              console.warn('playDing: Cannot create AudioContext (needs user gesture):', createErr);
+              // Still call safeDone so TTS can proceed
+              if (!done) safeDone();
+              return;
+            }
+          }
+          
+          // If we still don't have a context, give up
+          if (!ctx) {
+            console.warn('playDing: No AudioContext available');
+            if (!done) safeDone();
+            return;
+          }
+          
+          const playChime = () => {
+            if (done) return;
+            try {
+              console.log('playDing: Playing synthesized chime');
+              const osc1 = ctx.createOscillator();
+              const osc2 = ctx.createOscillator();
+              const gain = ctx.createGain();
+
+              osc1.type = 'sine';
+              osc2.type = 'sine';
+
+              const now = ctx.currentTime;
+              osc1.frequency.setValueAtTime(880, now);
+              osc2.frequency.setValueAtTime(1175, now + 0.08);
+
+              osc1.connect(gain);
+              osc2.connect(gain);
+              gain.connect(ctx.destination);
+
+              gain.gain.setValueAtTime(0.0001, now);
+              gain.gain.exponentialRampToValueAtTime(0.25, now + 0.03);
+              gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+
+              osc1.start(now);
+              osc2.start(now + 0.08);
+              osc1.stop(now + 0.4);
+              osc2.stop(now + 0.4);
+
+              setTimeout(() => {
+                if (!done) {
+                  console.log('playDing: Synthesized chime finished');
+                  safeDone();
+                }
+              }, 500);
+            } catch (chimeErr) {
+              console.error('playDing: Failed to play chime:', chimeErr);
+              if (!done) safeDone();
+            }
+          };
+          
+          if (ctx.state === 'suspended' && ctx.resume) {
+            ctx.resume().then(() => {
+              if (!done) playChime();
+            }).catch((resumeErr) => {
+              console.warn('playDing: AudioContext resume failed:', resumeErr);
+              if (!done) safeDone();
+            });
+          } else {
+            playChime();
+          }
+        };
+
+        const handleEnded = () => {
+          if (done) return;
+          console.log('playDing: Audio ended event fired, currentTime:', audio.currentTime, 'duration:', audio.duration);
+          audio.removeEventListener('ended', handleEnded);
+          audio.removeEventListener('error', handleError);
+          audio.removeEventListener('canplaythrough', handleCanPlay);
+          audio.removeEventListener('loadeddata', handleCanPlay);
+          
+          // Check if audio actually played
+          const playedEnough = audio.currentTime >= Math.min(0.1, audio.duration * 0.1);
+          if (playedEnough || audio.duration === 0) {
+            console.log('playDing: Custom ding played successfully');
+            customDingPlayed = true;
+            safeDone();
+          } else {
+            console.warn('playDing: Custom ding ended immediately, trying fallback chime');
+            tryFallbackChime();
+          }
+        };
+
+        const handleError = (err) => {
           console.error('Failed to play custom ding sound:', err);
-          safeDone();
-        });
+          audio.removeEventListener('ended', handleEnded);
+          audio.removeEventListener('error', handleError);
+          audio.removeEventListener('canplaythrough', handleCanPlay);
+          audio.removeEventListener('loadeddata', handleCanPlay);
+          tryFallbackChime();
+        };
 
-        audio.play().catch((err) => {
-          console.error('Failed to start custom ding sound:', err);
-          safeDone();
-        });
+        const attemptPlay = () => {
+          console.log('playDing: Audio ready, attempting to play, readyState:', audio.readyState, 'duration:', audio.duration, 'currentTime:', audio.currentTime);
+          // Reset to beginning in case audio was previously played
+          audio.currentTime = 0;
+          
+          // Small delay to ensure currentTime reset takes effect
+          setTimeout(() => {
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+              playPromise.then(() => {
+                console.log('playDing: Audio playing successfully, paused:', audio.paused, 'currentTime:', audio.currentTime, 'duration:', audio.duration);
+                // Verify audio is actually playing
+                setTimeout(() => {
+                  if (audio.paused && !done && !customDingPlayed) {
+                    console.warn('playDing: Audio paused after play() promise resolved, may be blocked by autoplay policy. Will try fallback chime.');
+                    handleError(new Error('Autoplay blocked'));
+                  } else if (!audio.paused) {
+                    console.log('playDing: Audio confirmed playing, currentTime:', audio.currentTime);
+                  }
+                }, 100);
+              }).catch((err) => {
+                console.error('Failed to start custom ding sound:', err);
+                handleError(err);
+              });
+            } else {
+              console.warn('playDing: play() returned undefined');
+              setTimeout(() => {
+                if (audio.paused && !done && !customDingPlayed) {
+                  console.warn('playDing: Audio is paused after play(), treating as error. Will try fallback chime.');
+                  handleError(new Error('Audio did not start playing'));
+                }
+              }, 100);
+            }
+          }, 10);
+        };
 
-        // Hard safety timeout in case the ended event never fires
-        setTimeout(safeDone, MAX_WAIT_MS);
-        return;
+        const handleCanPlay = () => {
+          audio.removeEventListener('canplaythrough', handleCanPlay);
+          audio.removeEventListener('loadeddata', handleCanPlay);
+          attemptPlay();
+        };
+
+        audio.addEventListener('ended', handleEnded);
+        audio.addEventListener('error', handleError);
+        
+        // Check if already ready, otherwise wait for load
+        if (audio.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+          console.log('playDing: Audio already loaded, playing immediately');
+          attemptPlay();
+        } else {
+          audio.addEventListener('canplaythrough', handleCanPlay);
+          audio.addEventListener('loadeddata', handleCanPlay);
+          audio.load();
+        }
+
+        // Hard safety timeout - if custom ding didn't play, try fallback chime
+        setTimeout(() => {
+          if (!done && !customDingPlayed) {
+            console.warn('playDing: Custom ding timeout (2s), trying fallback chime');
+            audio.removeEventListener('ended', handleEnded);
+            audio.removeEventListener('error', handleError);
+            audio.removeEventListener('canplaythrough', handleCanPlay);
+            audio.removeEventListener('loadeddata', handleCanPlay);
+            tryFallbackChime();
+          }
+        }, 2000);
+        
+        return; // Return here - handlers will call tryFallbackChime or safeDone
       }
 
-      // Fallback: synthesized chime
+      // Fallback: synthesized chime (use context unlocked by user gesture if available)
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (AudioCtx) {
-        const ctx = new AudioCtx();
-        const osc1 = ctx.createOscillator();
-        const osc2 = ctx.createOscillator();
-        const gain = ctx.createGain();
+        const ctx = audioContextRef.current || new AudioCtx();
+        
+        // Resume context if suspended - wait for it to resume before playing
+        const playChime = () => {
+          console.log('playDing: Playing synthesized chime');
+          const osc1 = ctx.createOscillator();
+          const osc2 = ctx.createOscillator();
+          const gain = ctx.createGain();
 
-        osc1.type = 'sine';
-        osc2.type = 'sine';
+          osc1.type = 'sine';
+          osc2.type = 'sine';
 
-        const now = ctx.currentTime;
-        osc1.frequency.setValueAtTime(880, now); // A5
-        osc2.frequency.setValueAtTime(1175, now + 0.08); // ~D6
+          const now = ctx.currentTime;
+          osc1.frequency.setValueAtTime(880, now); // A5
+          osc2.frequency.setValueAtTime(1175, now + 0.08); // ~D6
 
-        osc1.connect(gain);
-        osc2.connect(gain);
-        gain.connect(ctx.destination);
+          osc1.connect(gain);
+          osc2.connect(gain);
+          gain.connect(ctx.destination);
 
-        gain.gain.setValueAtTime(0.0001, now);
-        gain.gain.exponentialRampToValueAtTime(0.25, now + 0.03);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+          gain.gain.setValueAtTime(0.0001, now);
+          gain.gain.exponentialRampToValueAtTime(0.25, now + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
 
-        osc1.start(now);
-        osc2.start(now + 0.08);
-        osc1.stop(now + 0.4);
-        osc2.stop(now + 0.4);
+          osc1.start(now);
+          osc2.start(now + 0.08);
+          osc1.stop(now + 0.4);
+          osc2.stop(now + 0.4);
 
-        // Synth chime is ~0.4s; call done shortly after
-        setTimeout(safeDone, 500);
+          // Synth chime is ~0.4s; call done shortly after
+          setTimeout(() => {
+            console.log('playDing: Synthesized chime finished');
+            safeDone();
+          }, 500);
+        };
+        
+        if (ctx.state === 'suspended' && ctx.resume) {
+          ctx.resume().then(() => {
+            playChime();
+          }).catch(() => {
+            // If resume fails, try playing anyway
+            playChime();
+          });
+        } else {
+          playChime();
+        }
         return;
       }
+      
+      // If we get here, tryFallbackChime was called but AudioContext not available
+      console.warn('playDing: No AudioContext available, cannot play chime');
+      safeDone();
     } catch (err) {
       console.error('Failed to play ding sound:', err);
     }
@@ -199,41 +431,79 @@ export default function PublicMonitoring() {
     if (vid) vid.volume = Math.max(0, Math.min(1, volume));
   };
 
+  const fallbackSpeech = (text, resolve) => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-US';
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.onend = resolve;
+      utterance.onerror = resolve;
+      window.speechSynthesis.speak(utterance);
+    } else {
+      resolve();
+    }
+  };
+
   const playTTSAndWait = (text) => {
     return new Promise((resolve) => {
+      if (!text || typeof text !== 'string' || !text.trim()) {
+        console.warn('TTS: Empty or invalid text provided');
+        resolve();
+        return;
+      }
+      
       api.post('/tts', { text }, { responseType: 'arraybuffer' })
         .then((response) => {
-          const audioData = response.data;
-          if (!audioData) {
-            resolve();
+          const contentType = (response.headers && response.headers['content-type']) || '';
+          const isAudio = contentType.includes('audio/') || contentType.includes('mpeg');
+          if (response.status !== 200 || !isAudio || !response.data) {
+            console.warn('TTS: Invalid response, falling back to speechSynthesis');
+            fallbackSpeech(text, resolve);
             return;
           }
+          const audioData = response.data;
           const blob = new Blob([audioData], { type: 'audio/mpeg' });
           const ttsUrl = URL.createObjectURL(blob);
           const audio = new Audio(ttsUrl);
-          audio.addEventListener('ended', () => {
-            URL.revokeObjectURL(ttsUrl);
+          audio.volume = 1.0;
+
+          const cleanup = () => {
+            // Clear audio source first to stop any pending loads
+            audio.src = '';
+            audio.removeEventListener('ended', handleEnded);
+            audio.removeEventListener('error', handleError);
+            // Small delay before revoking to ensure audio element has released the URL
+            setTimeout(() => URL.revokeObjectURL(ttsUrl), 100);
+          };
+
+          const handleEnded = () => {
+            cleanup();
             resolve();
-          });
-          audio.addEventListener('error', () => {
-            URL.revokeObjectURL(ttsUrl);
-            resolve();
-          });
-          audio.play().catch(() => resolve());
-        })
-        .catch(() => {
-          if (typeof window !== 'undefined' && window.speechSynthesis) {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'en-US';
-            utterance.rate = 1;
-            utterance.pitch = 1;
-            utterance.onend = resolve;
-            utterance.onerror = resolve;
-            window.speechSynthesis.cancel();
-            window.speechSynthesis.speak(utterance);
-          } else {
-            resolve();
+          };
+
+          const handleError = (err) => {
+            console.error('TTS audio playback error:', err);
+            cleanup();
+            fallbackSpeech(text, resolve);
+          };
+
+          audio.addEventListener('ended', handleEnded);
+          audio.addEventListener('error', handleError);
+          
+          const playPromise = audio.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((err) => {
+              console.error('TTS audio play() failed:', err);
+              cleanup();
+              fallbackSpeech(text, resolve);
+            });
           }
+        })
+        .catch((err) => {
+          console.error('TTS API call failed:', err);
+          fallbackSpeech(text, resolve);
         });
     });
   };
@@ -243,18 +513,42 @@ export default function PublicMonitoring() {
   };
 
   const processNextAnnouncement = async () => {
-    if (isProcessingAnnouncementRef.current || announcementQueueRef.current.length === 0) return;
+    if (isProcessingAnnouncementRef.current) {
+      console.log('Already processing announcement, skipping');
+      return;
+    }
+    if (announcementQueueRef.current.length === 0) {
+      console.log('No announcements in queue');
+      return;
+    }
+    
+    console.log(`Processing announcement, queue length: ${announcementQueueRef.current.length}`);
     isProcessingAnnouncementRef.current = true;
-    const { text } = announcementQueueRef.current.shift();
-
-    duckVideoVolume(0.5);
-    await playDingAsync();
-    await playTTSAndWait(text);
-    duckVideoVolume(1.0);
-
-    isProcessingAnnouncementRef.current = false;
-    if (announcementQueueRef.current.length > 0) {
-      processNextAnnouncement();
+    const item = announcementQueueRef.current.shift();
+    if (!item) {
+      console.log('No item to process');
+      isProcessingAnnouncementRef.current = false;
+      if (announcementQueueRef.current.length > 0) processNextAnnouncement();
+      return;
+    }
+    const { text } = item;
+    console.log('Starting announcement:', text);
+    try {
+      duckVideoVolume(0.5);
+      console.log('Playing ding...');
+      await playDingAsync();
+      console.log('Ding finished, playing TTS...');
+      await playTTSAndWait(text);
+      console.log('TTS finished');
+      markAnnouncementDone(item.key);
+    } catch (err) {
+      console.error('Announcement playback error:', err);
+    } finally {
+      duckVideoVolume(1.0);
+      isProcessingAnnouncementRef.current = false;
+      if (announcementQueueRef.current.length > 0) {
+        processNextAnnouncement();
+      }
     }
   };
 
@@ -273,6 +567,8 @@ export default function PublicMonitoring() {
       }
     });
 
+    const now = Date.now();
+    const queueSet = new Set(announcementQueueRef.current.map((i) => i.key).filter(Boolean));
     const toAnnounce = [];
     (newWindows || []).forEach((w) => {
       if (!w || !w.id || !w.currentServing) return;
@@ -281,27 +577,41 @@ export default function PublicMonitoring() {
       const oldQueueNumber = oldMap.get(w.id);
       if (!newQueueNumber || newQueueNumber === oldQueueNumber) return;
 
+      const key = `${w.id}:${newQueueNumber}`;
+      if (queueSet.has(key)) return;
+      if (lastAnnouncedKeyRef.current === key && now - lastAnnouncedTimeRef.current < COLLISION_WINDOW_MS) return;
+      queueSet.add(key);
+
       const rawCounter = getQueueCounter ? getQueueCounter(newQueueNumber) : newQueueNumber;
       let spokenCounter = rawCounter;
       const parsed = parseInt(rawCounter, 10);
       if (!Number.isNaN(parsed)) spokenCounter = String(parsed);
 
       const windowLabel = w.label || 'Window';
-      const clientNamePart = clientName ? `, or client name ${clientName}` : '';
-      const baseTemplate = announcementTemplate ||
-        'Window {{window}} will now serve queue number {{queueNumber}}{{clientNamePart}}.';
+      const clientNamePart = clientName ? `, ${clientName}` : '';
+      // Hardcoded Cebuano announcement template
+      const template = 'Ang atong {{window}},... mu assist na sa kyu number, {{queueNumber}}. {{clientNamePart}}, please proceed to {{window}}.';
+      const text = template
+        .replace(/{{\s*window\s*}}/gi, windowLabel)
+        .replace(/{{\s*queueNumber\s*}}/gi, spokenCounter)
+        .replace(/{{\s*clientNamePart\s*}}/gi, clientNamePart);
 
-      const text = baseTemplate
-        .replace(/{{\s*(window|window number)\s*}}/gi, windowLabel)
-        .replace(/{{\s*(queueNumber|queue number)\s*}}/gi, spokenCounter)
-        .replace(/{{\s*clientNamePart\s*}}/gi, clientNamePart)
-        .replace(/{{\s*(clientName|client name)\s*}}/gi, clientName || '');
-
-      toAnnounce.push({ text });
+      console.log('Announcement queued:', { windowLabel, spokenCounter, text });
+      toAnnounce.push({ text, key });
     });
 
-    toAnnounce.forEach((item) => announcementQueueRef.current.push(item));
-    processNextAnnouncement();
+    if (toAnnounce.length > 0) {
+      console.log(`Adding ${toAnnounce.length} announcement(s) to queue`);
+      toAnnounce.forEach((item) => announcementQueueRef.current.push(item));
+      processNextAnnouncement();
+    }
+  };
+
+  const markAnnouncementDone = (key) => {
+    if (key) {
+      lastAnnouncedKeyRef.current = key;
+      lastAnnouncedTimeRef.current = Date.now();
+    }
   };
 
   const loadVideos = async () => {
@@ -320,14 +630,32 @@ export default function PublicMonitoring() {
     setCurrentVideo(video);
   };
 
+  const unlockAudio = () => {
+    if (audioUnlockedRef.current) return;
+    audioUnlockedRef.current = true;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx && !audioContextRef.current) {
+        const ctx = new Ctx();
+        audioContextRef.current = ctx;
+        if (ctx.resume) ctx.resume();
+      }
+    } catch (_) {}
+  };
+
   return (
-    <div style={{
-      height: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      background: '#f8fafc',
-      overflow: 'hidden',
-    }}>
+    <div
+      style={{
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#f8fafc',
+        overflow: 'hidden',
+      }}
+      onClick={unlockAudio}
+      onTouchStart={unlockAudio}
+      role="presentation"
+    >
       {/* Top half: header + cards (scrollable if needed) */}
       <div style={{
         flex: '0 0 50vh',

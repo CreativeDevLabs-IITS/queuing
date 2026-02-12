@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { UserCircle, LogOut } from 'lucide-react';
 import api, { getStoredUser } from '../utils/api';
 
-export default function AdminProfileDropdown({ onLogout }) {
+export default function AdminProfileDropdown({ onProfileClick, onLogout }) {
   const [isOpen, setIsOpen] = useState(false);
   const [admin, setAdmin] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -111,8 +112,36 @@ export default function AdminProfileDropdown({ onLogout }) {
             fontWeight: '600',
             color: '#1e293b',
           }}>
-            {admin?.name || 'Admin'}
+            {admin?.name || admin?.username || 'Admin'}
           </div>
+          {onProfileClick && (
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                onProfileClick();
+              }}
+              style={{
+                width: '100%',
+                padding: '14px 16px',
+                minHeight: '44px',
+                border: 'none',
+                background: 'transparent',
+                textAlign: 'left',
+                fontSize: '14px',
+                color: '#1e293b',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+              }}
+              onMouseOver={(e) => { e.currentTarget.style.background = '#f1f5f9'; }}
+              onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              <UserCircle size={18} />
+              Profile
+            </button>
+          )}
           <button
             onClick={() => {
               setIsOpen(false);
@@ -131,14 +160,16 @@ export default function AdminProfileDropdown({ onLogout }) {
               transition: 'background 0.2s',
               display: 'flex',
               alignItems: 'center',
+              gap: '10px',
             }}
             onMouseOver={(e) => {
-              e.target.style.background = '#fee2e2';
+              e.currentTarget.style.background = '#fee2e2';
             }}
             onMouseOut={(e) => {
-              e.target.style.background = 'transparent';
+              e.currentTarget.style.background = 'transparent';
             }}
           >
+            <LogOut size={18} />
             Logout
           </button>
         </div>

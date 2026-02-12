@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { UserCircle, LogOut } from 'lucide-react';
 import api from '../utils/api';
 
 export default function StaffProfileDropdown({ onProfileClick, onLogout }) {
@@ -130,14 +131,16 @@ export default function StaffProfileDropdown({ onProfileClick, onLogout }) {
               transition: 'background 0.2s',
               display: 'flex',
               alignItems: 'center',
+              gap: '10px',
             }}
             onMouseOver={(e) => {
-              e.target.style.background = '#f1f5f9';
+              e.currentTarget.style.background = '#f1f5f9';
             }}
             onMouseOut={(e) => {
-              e.target.style.background = 'transparent';
+              e.currentTarget.style.background = 'transparent';
             }}
           >
+            <UserCircle size={18} />
             Profile
           </button>
           <button
@@ -158,14 +161,16 @@ export default function StaffProfileDropdown({ onProfileClick, onLogout }) {
               transition: 'background 0.2s',
               display: 'flex',
               alignItems: 'center',
+              gap: '10px',
             }}
             onMouseOver={(e) => {
-              e.target.style.background = '#fee2e2';
+              e.currentTarget.style.background = '#fee2e2';
             }}
             onMouseOut={(e) => {
-              e.target.style.background = 'transparent';
+              e.currentTarget.style.background = 'transparent';
             }}
           >
+            <LogOut size={18} />
             Logout
           </button>
         </div>

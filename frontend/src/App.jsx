@@ -8,11 +8,14 @@ import StaffDashboard from './pages/StaffDashboard';
 import StaffProfile from './pages/StaffProfile';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminProfile from './pages/AdminProfile';
 import ToastContainer from './components/Toast';
+import Favicon from './components/Favicon';
 
 function App() {
   return (
     <>
+      <Favicon />
       <ToastContainer />
       <Routes>
       {/* Public/Client Routes */}
@@ -29,6 +32,7 @@ function App() {
       {/* Admin Routes */}
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/admin/dashboard" element={<AdminDashboard />} />
+      <Route path="/admin/profile" element={<AdminProfile />} />
     </Routes>
     </>
   );

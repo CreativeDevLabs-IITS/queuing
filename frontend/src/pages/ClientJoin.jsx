@@ -258,7 +258,7 @@ export default function ClientJoin() {
             type="submit"
             variant="gradient"
             fullWidth
-            disabled={submitting}
+            disabled={submitting || !formData.clientType || !formData.categoryIds?.length}
             style={{ marginTop: '8px', padding: '14px 24px', fontSize: '16px' }}
           >
             {submitting ? 'Joining...' : 'Join Queue'}
