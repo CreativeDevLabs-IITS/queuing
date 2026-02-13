@@ -3,3 +3,7 @@ node_modules/
 *.log
 .DS_Store
 backend/prisma/prisma/dev.db
+
+# Ignore all markdown files except README
+*.md
+!README.md
