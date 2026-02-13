@@ -1061,26 +1061,39 @@ export default function PublicMonitoring() {
             >
               <Loading />
             </div>
-          ) : windows.filter((w) => w.staff).length > 0 ? (
-            windows
-              .filter((w) => w.staff)
-              .map((window) => (
-                <WindowCard key={window.id} window={window} />
-              ))
-          ) : (
-            <div
-              style={{
-                textAlign: 'center',
-                padding: '24px 16px',
-                background: '#0b1120',
-                borderRadius: '12px',
-                color: '#64748b',
-                border: '1px solid #1f2937',
-              }}
-            >
-              No active windows at the moment
-            </div>
-          )}
+          ) : (() => {
+            const activeWindows = windows.filter((w) => w.staff);
+            if (activeWindows.length === 0) {
+              return (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    padding: '24px 16px',
+                    background: '#0b1120',
+                    borderRadius: '12px',
+                    color: '#64748b',
+                    border: '1px solid #1f2937',
+                  }}
+                >
+                  No active windows at the moment
+                </div>
+              );
+            }
+            const cardCount = activeWindows.length;
+            const cardFlex = cardCount <= 3 ? '0 0 20vh' : '1 1 0';
+            return activeWindows.map((window) => (
+              <div
+                key={window.id}
+                style={{
+                  flex: cardFlex,
+                  minHeight: cardCount > 3 ? 0 : undefined,
+                  display: 'flex',
+                }}
+              >
+                <WindowCard window={window} compact={cardCount > 3} />
+              </div>
+            ));
+          })()}
         </div>
       </div>
     </div>

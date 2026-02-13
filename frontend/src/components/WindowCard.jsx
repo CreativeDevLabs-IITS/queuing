@@ -8,7 +8,7 @@ function formatClientType(type) {
     .join(' ');
 }
 
-export default function WindowCard({ window }) {
+export default function WindowCard({ window, compact = false }) {
   const { label, staff, currentServing } = window;
 
   const getInitials = (name) => {
@@ -47,7 +47,8 @@ export default function WindowCard({ window }) {
         transition: 'all 0.2s',
         display: 'flex',
         alignItems: 'stretch',
-        minHeight: '96px',
+        minHeight: compact ? 0 : '96px',
+        flex: 1,
         overflow: 'hidden',
       }}
     >
