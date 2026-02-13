@@ -88,4 +88,33 @@ router.post('/picture', upload.single('picture'), async (req, res) => {
   }
 });
 
+// Remove profile picture (revert to initials)
+router.delete('/picture', async (req, res) => {
+  try {
+    const staffId = req.user.id;
+
+    const staff = await prisma.staff.findUnique({
+      where: { id: staffId },
+      select: { profilePicture: true },
+    });
+
+    if (staff?.profilePicture) {
+      const picturePath = path.join(__dirname, '..', staff.profilePicture.replace('/uploads/', 'uploads/'));
+      if (fs.existsSync(picturePath)) {
+        fs.unlinkSync(picturePath);
+      }
+    }
+
+    await prisma.staff.update({
+      where: { id: staffId },
+      data: { profilePicture: null },
+    });
+
+    res.json({ success: true, profilePicture: null });
+  } catch (error) {
+    console.error('Remove profile picture error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

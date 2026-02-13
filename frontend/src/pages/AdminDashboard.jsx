@@ -947,7 +947,9 @@ function StaffTab({ staff, categories, onRefresh, form, setForm, setInputDialog,
         {staff.map((s) => {
           const initials = s.name ? s.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : s.username.charAt(0).toUpperCase();
           const specializations = s.specializations ? s.specializations.map(sp => sp.category.name) : [];
-          
+          const profileImgUrl = s.profilePicture
+            ? (s.profilePicture.startsWith('http') || s.profilePicture.startsWith('/') ? s.profilePicture : '/' + s.profilePicture)
+            : null;
           return (
             <div key={s.id} style={{
               background: 'white',
@@ -964,17 +966,17 @@ function StaffTab({ staff, categories, onRefresh, form, setForm, setInputDialog,
                 width: '80px',
                 height: '80px',
                 borderRadius: '50%',
-                background: s.profilePictureUrl ? 'transparent' : '#2563eb',
+                background: profileImgUrl ? 'transparent' : '#2563eb',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 overflow: 'hidden',
                 marginBottom: '8px',
-                border: s.profilePictureUrl ? '2px solid #e2e8f0' : 'none',
+                border: profileImgUrl ? '2px solid #e2e8f0' : 'none',
               }}>
-                {s.profilePictureUrl ? (
+                {profileImgUrl ? (
                   <img 
-                    src={s.profilePictureUrl} 
+                    src={profileImgUrl} 
                     alt={s.name}
                     style={{
                       width: '100%',

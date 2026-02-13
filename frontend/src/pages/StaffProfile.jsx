@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, KeyRound, Key, Save, X, Monitor } from 'lucide-react';
+import { ArrowLeft, KeyRound, Key, Save, X, Monitor, ImageOff } from 'lucide-react';
 import api, { getStoredUser } from '../utils/api';
 import Input from '../components/Input';
 import Button from '../components/Button';
@@ -27,6 +27,7 @@ export default function StaffProfile() {
   const [windows, setWindows] = useState([]);
   const [selectedWindowId, setSelectedWindowId] = useState('');
   const [switchingWindow, setSwitchingWindow] = useState(false);
+  const [removingPicture, setRemovingPicture] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -89,6 +90,22 @@ export default function StaffProfile() {
       toastError(error.response?.data?.error || 'Failed to switch window');
     } finally {
       setSwitchingWindow(false);
+    }
+  };
+
+  const handleRemovePicture = async () => {
+    setRemovingPicture(true);
+    try {
+      await api.delete('/staff/profile/picture');
+      setProfilePicture(null);
+      setPreview(null);
+      setStaff((prev) => (prev ? { ...prev, profilePicture: null } : null));
+      toastSuccess('Profile picture removed. Your initials will be shown instead.');
+    } catch (error) {
+      console.error('Failed to remove picture:', error);
+      toastError(error.response?.data?.error || 'Failed to remove picture');
+    } finally {
+      setRemovingPicture(false);
     }
   };
 
@@ -282,31 +299,43 @@ export default function StaffProfile() {
               }}>
                 {!displayPicture && getInitials(staff?.name)}
               </div>
-              <label style={{
-                display: 'inline-block',
-                padding: '8px 16px',
-                background: '#2563eb',
-                color: 'white',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'background 0.2s',
-              }}
-              onMouseOver={(e) => {
-                e.target.style.background = '#1e40af';
-              }}
-              onMouseOut={(e) => {
-                e.target.style.background = '#2563eb';
-              }}>
-                Change Picture
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  style={{ display: 'none' }}
-                />
-              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+                <label style={{
+                  display: 'inline-block',
+                  padding: '8px 16px',
+                  background: '#2563eb',
+                  color: 'white',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s',
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = '#1e40af';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = '#2563eb';
+                }}>
+                  Change Picture
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+                {displayPicture && (
+                  <Button
+                    variant="outline"
+                    icon={ImageOff}
+                    onClick={handleRemovePicture}
+                    disabled={removingPicture}
+                  >
+                    {removingPicture ? 'Removing...' : 'Remove photo'}
+                  </Button>
+                )}
+              </div>
               <p style={{
                 fontSize: '12px',
                 color: '#64748b',
