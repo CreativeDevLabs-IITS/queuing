@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
 import prisma from '../db.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, getHourInManila } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -32,6 +32,13 @@ router.post('/staff/login', [
     if (!staff.isActive) {
       console.error(`Staff login failed: User '${username}' is inactive`);
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    if (getHourInManila() >= 21) {
+      return res.status(401).json({
+        error: 'Staff login is not available after 9pm. Please try again tomorrow.',
+        code: 'STAFF_LOGOUT_9PM',
+      });
     }
 
     const isValid = await bcrypt.compare(password, staff.password);

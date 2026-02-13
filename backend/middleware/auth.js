@@ -1,5 +1,21 @@
 import jwt from 'jsonwebtoken';
 
+const STAFF_LOGOUT_HOUR = 21; // 9pm
+const TIMEZONE = 'Asia/Manila';
+
+export function getHourInManila() {
+  const hourStr = new Date().toLocaleString('en-US', {
+    timeZone: TIMEZONE,
+    hour: 'numeric',
+    hour12: false,
+  });
+  return parseInt(hourStr, 10) || 0;
+}
+
+function isPastStaffLogoutTime() {
+  return getHourInManila() >= STAFF_LOGOUT_HOUR;
+}
+
 export const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -11,6 +27,12 @@ export const authenticateToken = (req, res, next) => {
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) {
       return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    if (user.role === 'STAFF' && isPastStaffLogoutTime()) {
+      return res.status(401).json({
+        error: 'Automatic logout: staff sessions end at 9pm',
+        code: 'STAFF_LOGOUT_9PM',
+      });
     }
     req.user = user;
     next();

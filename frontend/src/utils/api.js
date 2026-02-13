@@ -38,7 +38,9 @@ api.interceptors.response.use(
         }
       } else if (currentPath.startsWith("/staff")) {
         if (currentPath !== "/staff/login") {
-          window.location.href = "/staff/login";
+          const code = error.response?.data?.code;
+          const query = code === "STAFF_LOGOUT_9PM" ? "?reason=logout_9pm" : "";
+          window.location.href = "/staff/login" + query;
         }
       }
     }

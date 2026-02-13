@@ -60,10 +60,12 @@ async function autoResolveOldServingEntries() {
 // Get staff dashboard data
 router.get('/dashboard', async (req, res) => {
   try {
+    const staffId = req.user.id;
+    // Update last seen for online indicator (fire-and-forget to avoid adding latency)
+    void prisma.staff.update({ where: { id: staffId }, data: { lastSeenAt: new Date() } }).catch(() => {});
+
     // Auto-resolve old serving entries before querying
     await autoResolveOldServingEntries();
-
-    const staffId = req.user.id;
 
     // Get current window assignment
     const windowAssignment = await prisma.windowAssignment.findFirst({
@@ -292,6 +294,9 @@ router.post('/assign-window', async (req, res) => {
 router.get('/profile', async (req, res) => {
   try {
     const staffId = req.user.id;
+    // Update last seen for online indicator (fire-and-forget)
+    void prisma.staff.update({ where: { id: staffId }, data: { lastSeenAt: new Date() } }).catch(() => {});
+
     const staff = await prisma.staff.findUnique({
       where: { id: staffId },
       select: {

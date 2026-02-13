@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api, { getStoredUser } from '../utils/api';
 import Input from '../components/Input';
 import Button from '../components/Button';
@@ -7,6 +7,8 @@ import Logo from '../components/Logo';
 
 export default function StaffLogin() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const logout9pm = searchParams.get("reason") === "logout_9pm";
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -86,6 +88,19 @@ export default function StaffLogin() {
         }}>
           Sign in to manage your queue
         </p>
+
+        {logout9pm && (
+          <div style={{
+            padding: '12px',
+            background: '#fef3c7',
+            color: '#92400e',
+            borderRadius: '8px',
+            marginBottom: '16px',
+            fontSize: '14px',
+          }}>
+            You were automatically logged out. Staff sessions end at 9pm.
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           <Input

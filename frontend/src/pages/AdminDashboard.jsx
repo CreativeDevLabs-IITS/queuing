@@ -52,6 +52,7 @@ export default function AdminDashboard() {
     endHour: '',
   });
   const [showFilters, setShowFilters] = useState(false);
+  const [staffIdleMinutes, setStaffIdleMinutes] = useState(5);
 
   // Form states
   const [staffForm, setStaffForm] = useState({ open: false, data: {} });
@@ -69,12 +70,20 @@ export default function AdminDashboard() {
     }
 
     loadData();
-    const interval = setInterval(() => {
+    const dashboardInterval = setInterval(() => {
       if (activeTab === 'dashboard') {
         loadDashboard();
       }
     }, 3000);
-    return () => clearInterval(interval);
+    const staffInterval = setInterval(() => {
+      if (activeTab === 'staff') {
+        loadStaff();
+      }
+    }, 30000); // Refresh staff list every 30s so online/offline indicator updates
+    return () => {
+      clearInterval(dashboardInterval);
+      clearInterval(staffInterval);
+    };
   }, [navigate, activeTab]);
 
   useEffect(() => {
@@ -83,6 +92,18 @@ export default function AdminDashboard() {
     }
   }, [activeTab, reportFilters]);
 
+  const loadStaffIdleMinutes = async () => {
+    try {
+      const res = await api.get('/admin/settings/staff-idle-minutes');
+      const value = res.data.staffIdleMinutes;
+      if (typeof value === 'number' && value >= 1 && value <= 120) {
+        setStaffIdleMinutes(value);
+      }
+    } catch (error) {
+      console.error('Failed to load staff idle minutes:', error);
+    }
+  };
+
   const loadData = async () => {
     try {
       await Promise.all([
@@ -90,6 +111,7 @@ export default function AdminDashboard() {
         loadStaff(),
         loadWindows(),
         loadCategories(),
+        loadStaffIdleMinutes(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -383,6 +405,7 @@ export default function AdminDashboard() {
             form={staffForm}
             setForm={setStaffForm}
             setInputDialog={setInputDialog}
+            staffIdleMinutes={staffIdleMinutes}
           />
         )}
         {activeTab === 'windows' && (
@@ -416,7 +439,10 @@ export default function AdminDashboard() {
           />
         )}
         {activeTab === 'settings' && (
-          <SettingsTab />
+          <SettingsTab
+            staffIdleMinutes={staffIdleMinutes}
+            onStaffIdleMinutesSaved={setStaffIdleMinutes}
+          />
         )}
       </div>
     </div>
@@ -586,7 +612,7 @@ function StatCard({ label, value, color = '#2563eb', icon: Icon }) {
   );
 }
 
-function StaffTab({ staff, categories, onRefresh, form, setForm, setInputDialog }) {
+function StaffTab({ staff, categories, onRefresh, form, setForm, setInputDialog, staffIdleMinutes = 5 }) {
   const [editing, setEditing] = useState(null);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const dropdownRef = useRef(null);
@@ -976,6 +1002,38 @@ function StaffTab({ staff, categories, onRefresh, form, setForm, setInputDialog 
                 <div style={{ fontSize: '12px', color: '#64748b' }}>
                   {s.username}
                 </div>
+              </div>
+
+              {/* Online / Offline indicator */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                marginBottom: '8px',
+                fontSize: '12px',
+                color: '#64748b',
+              }}>
+                <span style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  background: (() => {
+                    const lastSeen = s.lastSeenAt ? new Date(s.lastSeenAt).getTime() : 0;
+                    const idleMs = (staffIdleMinutes || 5) * 60 * 1000;
+                    const threshold = Date.now() - idleMs;
+                    return lastSeen >= threshold ? '#22c55e' : '#94a3b8';
+                  })(),
+                  flexShrink: 0,
+                }} />
+                <span>
+                  {(() => {
+                    const lastSeen = s.lastSeenAt ? new Date(s.lastSeenAt).getTime() : 0;
+                    const idleMs = (staffIdleMinutes || 5) * 60 * 1000;
+                    const threshold = Date.now() - idleMs;
+                    return lastSeen >= threshold ? 'Online' : 'Offline';
+                  })()}
+                </span>
               </div>
 
               {/* Specializations Badges */}
@@ -2677,7 +2735,9 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
       )}
     </div>
   );
-}function SettingsTab() {
+}
+
+function SettingsTab({ staffIdleMinutes = 5, onStaffIdleMinutesSaved }) {
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
   const [currentLogo, setCurrentLogo] = useState(null);
@@ -2713,6 +2773,12 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
   const [settingsView, setSettingsView] = useState('branding'); // 'branding' | 'audio' | 'videos' | 'data'
   const [resetQueueConfirm, setResetQueueConfirm] = useState({ open: false });
   const [resettingQueue, setResettingQueue] = useState(false);
+  const [staffIdleMinutesInput, setStaffIdleMinutesInput] = useState(String(staffIdleMinutes));
+  const [savingStaffIdleMinutes, setSavingStaffIdleMinutes] = useState(false);
+
+  useEffect(() => {
+    setStaffIdleMinutesInput(String(staffIdleMinutes));
+  }, [staffIdleMinutes]);
 
   useEffect(() => {
     loadCurrentLogo();
@@ -3560,9 +3626,75 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
         </div>
       )}
 
-      {/* DATA TAB - Reset queue stats */}
+      {/* DATA TAB - Staff idle + Reset queue stats */}
       {settingsView === 'data' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Staff idle threshold */}
+          <div style={{
+            background: 'white',
+            borderRadius: '12px',
+            padding: '24px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            borderTop: '3px solid #22c55e',
+          }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
+              Staff idle threshold
+            </h3>
+            <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '16px' }}>
+              After this many minutes without activity (e.g. opening the staff dashboard or profile), a staff member is shown as <strong>Offline</strong> on the Staff page. (1–120 minutes.)
+            </p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const num = Number(staffIdleMinutesInput);
+                if (!Number.isFinite(num) || num < 1 || num > 120) {
+                  toastError('Enter a number between 1 and 120.');
+                  return;
+                }
+                setSavingStaffIdleMinutes(true);
+                try {
+                  const res = await api.post('/admin/settings/staff-idle-minutes', {
+                    staffIdleMinutes: Math.round(num),
+                  });
+                  const value = res.data.staffIdleMinutes;
+                  setStaffIdleMinutesInput(String(value));
+                  if (typeof onStaffIdleMinutesSaved === 'function') {
+                    onStaffIdleMinutesSaved(value);
+                  }
+                  toastSuccess('Staff idle threshold saved.');
+                } catch (error) {
+                  toastError(error.response?.data?.error || 'Failed to save.');
+                } finally {
+                  setSavingStaffIdleMinutes(false);
+                }
+              }}
+              style={{ maxWidth: '260px', display: 'flex', flexDirection: 'column', gap: '8px' }}
+            >
+              <label style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>
+                Minutes (1–120)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={120}
+                value={staffIdleMinutesInput}
+                onChange={(e) => setStaffIdleMinutesInput(e.target.value.replace(/[^\d]/g, '').slice(0, 3))}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '2px solid #e2e8f0',
+                  fontSize: '14px',
+                }}
+              />
+              <div style={{ marginTop: '8px' }}>
+                <Button type="submit" disabled={savingStaffIdleMinutes}>
+                  {savingStaffIdleMinutes ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            </form>
+          </div>
+
           <div style={{
             background: 'white',
             borderRadius: '12px',

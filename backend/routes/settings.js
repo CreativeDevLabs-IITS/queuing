@@ -357,6 +357,47 @@ router.post('/youtube-playlist', authenticateToken, requireAdmin, async (req, re
   }
 });
 
+// Get staff idle minutes (admin only - used for online/offline indicator)
+router.get('/staff-idle-minutes', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const setting = await prisma.settings.findUnique({
+      where: { key: 'staff_idle_minutes' },
+    });
+    let value = 5;
+    if (setting?.value != null) {
+      const parsed = parseInt(String(setting.value), 10);
+      if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= 120) {
+        value = parsed;
+      }
+    }
+    res.json({ staffIdleMinutes: value });
+  } catch (error) {
+    console.error('Get staff idle minutes error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Set staff idle minutes (admin only)
+router.post('/staff-idle-minutes', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { staffIdleMinutes: raw } = req.body || {};
+    const num = Number(raw);
+    if (!Number.isFinite(num) || num < 1 || num > 120) {
+      return res.status(400).json({ error: 'Staff idle minutes must be a number between 1 and 120.' });
+    }
+    const value = Math.round(num);
+    await prisma.settings.upsert({
+      where: { key: 'staff_idle_minutes' },
+      update: { value: String(value) },
+      create: { key: 'staff_idle_minutes', value: String(value) },
+    });
+    res.json({ success: true, staffIdleMinutes: value });
+  } catch (error) {
+    console.error('Set staff idle minutes error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get TTS announcement template (public - used by monitoring page)
 router.get('/tts-announcement', async (req, res) => {
   try {
