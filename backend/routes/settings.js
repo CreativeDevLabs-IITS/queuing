@@ -81,6 +81,37 @@ const soundUpload = multer({
   },
 });
 
+// Get site title (public - used next to/below logo on all pages)
+router.get('/site-title', async (req, res) => {
+  try {
+    const setting = await prisma.settings.findUnique({
+      where: { key: 'site_title' },
+    });
+    const siteTitle = setting?.value?.trim() || null;
+    res.json({ siteTitle });
+  } catch (error) {
+    console.error('Get site title error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Set site title (admin only)
+router.post('/site-title', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { siteTitle } = req.body ?? {};
+    const value = typeof siteTitle === 'string' ? siteTitle.trim() : '';
+    await prisma.settings.upsert({
+      where: { key: 'site_title' },
+      update: { value },
+      create: { key: 'site_title', value },
+    });
+    res.json({ success: true, siteTitle: value || null });
+  } catch (error) {
+    console.error('Set site title error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get logo (public endpoint - no auth required)
 router.get('/logo', async (req, res) => {
   try {

@@ -106,7 +106,7 @@ export default function WindowCard({ window, compact = false }) {
         {/* Staff name */}
         <div
           style={{
-            fontSize: '14px',
+            fontSize: '18px',
             fontWeight: '700',
             color: '#e5e7eb',
             marginBottom: '2px',
@@ -177,7 +177,7 @@ export default function WindowCard({ window, compact = false }) {
           style={{
             marginTop: 'auto',
             paddingTop: '2px',
-            fontSize: '15px',
+            fontSize: '20px',
             fontWeight: '700',
             color: '#38bdf8',
             whiteSpace: 'nowrap',

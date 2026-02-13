@@ -120,7 +120,7 @@ export default function ClientSuccess() {
       }}>
         {/* Logo */}
         <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'center' }}>
-          <Logo size="medium" />
+          <Logo size="medium" titlePosition="below" align="center" />
         </div>
         
         {/* Header */}

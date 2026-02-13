@@ -319,14 +319,13 @@ export default function StaffDashboard() {
           justifyContent: 'space-between',
           alignItems: 'center',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flex: 1 }}>
-            <Logo size="small" />
-            {window && (
-              <div className="staff-dashboard-header-center" style={{ fontSize: '18px', fontWeight: '600', color: '#1e293b' }}>
-                Operating: {window.label}
-              </div>
-            )}
-          </div>
+          <Logo size="small" />
+          <div style={{ flex: 1 }} />
+          {window && (
+            <div className="staff-dashboard-header-center" style={{ fontSize: '18px', fontWeight: '600', color: '#1e293b', marginRight: '30px' }}>
+              Operating: {window.label}
+            </div>
+          )}
           <StaffProfileDropdown
             onProfileClick={handleProfileClick}
             onLogout={handleLogout}

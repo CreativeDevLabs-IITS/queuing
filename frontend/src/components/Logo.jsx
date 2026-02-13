@@ -1,29 +1,43 @@
 import { useState, useEffect } from 'react';
 import api from '../utils/api';
 
-export default function Logo({ size = 'medium', showText = true, gap = '12px' }) {
+const QUEUING_SYSTEM_LABEL = 'Queuing System';
+
+export default function Logo({
+  size = 'medium',
+  showText = true,
+  showTitle = true,
+  titlePosition = 'next',
+  align = 'left',
+  gap = '12px',
+  variant = 'default',
+}) {
   const [logoUrl, setLogoUrl] = useState(null);
+  const [siteTitle, setSiteTitle] = useState(null);
   const [loading, setLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     loadLogo();
-    // Refresh logo every 30 seconds in case it was updated
     const interval = setInterval(loadLogo, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!showTitle) return;
+    loadSiteTitle();
+    const interval = setInterval(loadSiteTitle, 30000);
+    return () => clearInterval(interval);
+  }, [showTitle]);
 
   const loadLogo = async () => {
     try {
       const res = await api.get('/admin/settings/logo');
       if (res.data.logoUrl) {
-        // Ensure the URL is properly formatted
         let url = res.data.logoUrl;
-        // If it's a relative path, ensure it starts with /
         if (url && !url.startsWith('http') && !url.startsWith('/')) {
           url = '/' + url;
         }
-        // Add cache busting parameter to ensure fresh load
         const separator = url.includes('?') ? '&' : '?';
         url = url + separator + '_t=' + Date.now();
         setLogoUrl(url);
@@ -33,7 +47,6 @@ export default function Logo({ size = 'medium', showText = true, gap = '12px' })
         setImageError(false);
       }
     } catch (error) {
-      // Log error for debugging
       console.error('Failed to load logo:', error);
       setImageError(true);
     } finally {
@@ -41,25 +54,50 @@ export default function Logo({ size = 'medium', showText = true, gap = '12px' })
     }
   };
 
+  const loadSiteTitle = async () => {
+    try {
+      const res = await api.get('/admin/settings/site-title');
+      setSiteTitle(res.data.siteTitle || null);
+    } catch (error) {
+      console.error('Failed to load site title:', error);
+      setSiteTitle(null);
+    }
+  };
+
   const sizes = {
     small: { width: '80px', height: '40px' },
     medium: { width: '120px', height: '60px' },
     large: { width: '180px', height: '90px' },
-    monitor: { width: '88px', height: '80px' }, // slightly smaller for public monitor overlay
+    monitor: { width: '88px', height: '80px' },
   };
 
   const sizeStyle = sizes[size] || sizes.medium;
+  const titleFontSize =
+    size === 'small' ? '18px' : size === 'large' ? '28px' : size === 'monitor' ? '18px' : '24px';
+  const subtitleFontSize =
+    size === 'small' ? '14px' : size === 'large' ? '20px' : size === 'monitor' ? '14px' : '16px';
+  const isMonitor = variant === 'monitor';
+  const titleStyle = {
+    fontSize: titleFontSize,
+    fontWeight: '700',
+    color: isMonitor ? '#e5e7eb' : '#1e293b',
+    ...(isMonitor && { textShadow: '0 2px 4px rgba(0,0,0,0.6)' }),
+  };
+  const subtitleStyle = {
+    fontSize: subtitleFontSize,
+    fontWeight: '600',
+    color: isMonitor ? '#e5e7eb' : '#64748b',
+    textTransform: 'uppercase',
+    ...(isMonitor && { textShadow: '0 2px 4px rgba(0,0,0,0.6)' }),
+  };
+  const isCenter = align === 'center';
 
   if (loading) {
     return null;
   }
 
-  return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap,
-    }}>
+  const logoEl = (
+    <>
       {logoUrl && !imageError ? (
         <img
           src={logoUrl}
@@ -69,35 +107,77 @@ export default function Logo({ size = 'medium', showText = true, gap = '12px' })
             objectFit: 'contain',
             maxWidth: '100%',
           }}
-          onError={(e) => {
-            console.error('Failed to load logo image:', logoUrl);
+          onError={() => {
             setImageError(true);
             setLogoUrl(null);
           }}
         />
       ) : (
-        <div style={{
-          ...sizeStyle,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          borderRadius: '8px',
-          color: 'white',
-          fontWeight: '700',
-          fontSize: size === 'small' ? '14px' : size === 'large' ? '24px' : '18px',
-        }}>
+        <div
+          style={{
+            ...sizeStyle,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            borderRadius: '8px',
+            color: 'white',
+            fontWeight: '700',
+            fontSize: size === 'small' ? '14px' : size === 'large' ? '24px' : '18px',
+          }}
+        >
           Q
         </div>
       )}
-      {showText && (
-        <span style={{
-          fontSize: size === 'small' ? '18px' : size === 'large' ? '28px' : '24px',
-          fontWeight: '700',
-          color: '#1e293b',
-        }}>
-        </span>
-      )}
+    </>
+  );
+
+  // Title block: optional site title on first line, "Queuing System" on next line (when showTitle)
+  const titleBlock =
+    showTitle ? (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 0,
+          alignItems: isCenter ? 'center' : 'flex-start',
+          textAlign: isCenter ? 'center' : 'left',
+        }}
+      >
+        {siteTitle && <span style={titleStyle}>{siteTitle}</span>}
+        <span style={subtitleStyle}>{QUEUING_SYSTEM_LABEL}</span>
+      </div>
+    ) : null;
+
+  if (titlePosition === 'below' && (logoEl || titleBlock)) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: isCenter ? 'center' : 'flex-start',
+          gap: '8px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: isCenter ? 'center' : undefined, gap }}>
+          {logoEl}
+        </div>
+        {titleBlock}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap,
+        flexDirection: 'row',
+      }}
+    >
+      {logoEl}
+      {titleBlock}
     </div>
   );
 }

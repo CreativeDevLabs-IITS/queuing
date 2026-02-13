@@ -903,7 +903,7 @@ export default function PublicMonitoring() {
             justifyContent: 'center',
           }}
         >
-          {/* Overlayed logo + title (no background, tight to logo) */}
+          {/* Overlayed logo + site title (from settings) */}
           <div
             style={{
               position: 'absolute',
@@ -912,46 +912,11 @@ export default function PublicMonitoring() {
               zIndex: 10,
               display: 'flex',
               alignItems: 'center',
-              gap: 0,
+              gap: '8px',
               pointerEvents: 'none',
             }}
           >
-            <div>
-              <Logo size="monitor" showText={false} gap="0px" />
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                lineHeight: 1.1,
-                marginLeft: 0,
-              }}
-            >
-              <span
-                style={{
-                  fontSize: '18px',
-                  fontWeight: 700,
-                  color: '#e5e7eb',
-                  textShadow: '0 2px 4px rgba(0,0,0,0.6)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Hilongos Treasury Office
-              </span>
-              <span
-                style={{
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  color: '#e5e7eb',
-                  textShadow: '0 2px 4px rgba(0,0,0,0.6)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.12em',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Queue Monitoring
-              </span>
-            </div>
+            <Logo size="monitor" showText={false} showTitle={true} variant="monitor" gap="8px" />
           </div>
 
           {videos.length > 0 && !videoError ? (

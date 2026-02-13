@@ -67,7 +67,7 @@ export default function AdminLogin() {
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
       }}>
         <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'center' }}>
-          <Logo size="medium" />
+          <Logo size="medium" titlePosition="below" align="center" />
         </div>
         <h1 className="admin-login-title" style={{
           fontSize: '28px',

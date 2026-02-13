@@ -329,12 +329,11 @@ export default function AdminDashboard() {
           justifyContent: 'space-between',
           alignItems: 'center',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flex: 1 }}>
-            <Logo size="small" />
-            <h1 style={{ fontSize: '24px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
-              Admin Dashboard
-            </h1>
-          </div>
+          <Logo size="small" />
+          <div style={{ flex: 1 }} />
+          <h1 style={{ fontSize: '24px', fontWeight: '700', color: '#1e293b', margin: 0, marginRight: '30px' }}>
+            Admin Dashboard
+          </h1>
           <AdminProfileDropdown onProfileClick={() => navigate('/admin/profile')} onLogout={handleLogout} />
         </div>
 
@@ -2741,6 +2740,8 @@ function SettingsTab({ staffIdleMinutes = 5, onStaffIdleMinutesSaved }) {
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
   const [currentLogo, setCurrentLogo] = useState(null);
+  const [siteTitle, setSiteTitle] = useState('');
+  const [savingSiteTitle, setSavingSiteTitle] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({ open: false });
@@ -2782,12 +2783,22 @@ function SettingsTab({ staffIdleMinutes = 5, onStaffIdleMinutesSaved }) {
 
   useEffect(() => {
     loadCurrentLogo();
+    loadSiteTitle();
     loadCurrentDing();
     loadTtsVoices();
     loadVideoSource();
     loadYoutubePlaylist();
     loadVideoVolume();
   }, []);
+
+  const loadSiteTitle = async () => {
+    try {
+      const res = await api.get('/admin/settings/site-title');
+      setSiteTitle(res.data.siteTitle ?? '');
+    } catch (error) {
+      console.error('Failed to load site title:', error);
+    }
+  };
 
   const loadCurrentLogo = async () => {
     try {
@@ -3247,6 +3258,62 @@ function SettingsTab({ staffIdleMinutes = 5, onStaffIdleMinutesSaved }) {
             )}
           </div>
         </form>
+          </div>
+
+          {/* Site title */}
+          <div style={{
+            background: 'white',
+            borderRadius: '12px',
+            padding: '24px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            borderTop: '3px solid #2563eb',
+          }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
+              Site title
+            </h3>
+            <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '24px' }}>
+              This title appears next to (or below) the logo on every page.
+            </p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setSavingSiteTitle(true);
+                try {
+                  await api.post('/admin/settings/site-title', {
+                    siteTitle: siteTitle.trim(),
+                  });
+                  toastSuccess('Site title saved.');
+                } catch (error) {
+                  toastError(error.response?.data?.error || 'Failed to save site title');
+                } finally {
+                  setSavingSiteTitle(false);
+                }
+              }}
+              style={{ maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '8px' }}
+            >
+              <label style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>
+                Title
+              </label>
+              <input
+                type="text"
+                value={siteTitle}
+                onChange={(e) => setSiteTitle(e.target.value)}
+                placeholder="e.g. My Office Name"
+                maxLength={120}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '2px solid #e2e8f0',
+                  fontSize: '14px',
+                }}
+              />
+              <div style={{ marginTop: '8px' }}>
+                <Button type="submit" disabled={savingSiteTitle}>
+                  {savingSiteTitle ? 'Saving...' : 'Save title'}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}
