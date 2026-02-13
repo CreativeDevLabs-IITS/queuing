@@ -919,6 +919,21 @@ export default function PublicMonitoring() {
             <Logo size="monitor" showText={false} showTitle={true} variant="monitor" gap="8px" />
           </div>
 
+          {/* Powered by overlay */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 12,
+              left: 16,
+              zIndex: 10,
+              fontSize: '12px',
+              color: 'rgba(255,255,255,0.7)',
+              pointerEvents: 'none',
+            }}
+          >
+            Powered by: CreativeDevLabs
+          </div>
+
           {videos.length > 0 && !videoError ? (
             videoSource === 'youtube' ? (
               <div
