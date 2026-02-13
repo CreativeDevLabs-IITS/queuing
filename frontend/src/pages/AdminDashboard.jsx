@@ -2701,9 +2701,13 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
   const [savingVoices, setSavingVoices] = useState(false);
 
 
-  // Video folder state
-  const [videoFolderPath, setVideoFolderPath] = useState('');
-  const [savingVideoFolder, setSavingVideoFolder] = useState(false);
+  // Video state
+  const [videoSource, setVideoSource] = useState('youtube'); // 'local' | 'youtube'
+  const [savingVideoSource, setSavingVideoSource] = useState(false);
+  const [youtubeUrls, setYoutubeUrls] = useState('');
+  const [savingYoutubePlaylist, setSavingYoutubePlaylist] = useState(false);
+  const [videoVolume, setVideoVolume] = useState('50'); // percent string 0–100
+  const [savingVideoVolume, setSavingVideoVolume] = useState(false);
 
   // Local tab state for settings subsections
   const [settingsView, setSettingsView] = useState('branding'); // 'branding' | 'audio' | 'videos' | 'data'
@@ -2714,7 +2718,9 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
     loadCurrentLogo();
     loadCurrentDing();
     loadTtsVoices();
-    loadVideoFolderPath();
+    loadVideoSource();
+    loadYoutubePlaylist();
+    loadVideoVolume();
   }, []);
 
   const loadCurrentLogo = async () => {
@@ -2762,14 +2768,64 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
   };
 
 
-  const loadVideoFolderPath = async () => {
+  const loadVideoSource = async () => {
     try {
-      const res = await api.get('/admin/settings/video-folder');
-      if (res.data.videoFolderPath) {
-        setVideoFolderPath(res.data.videoFolderPath);
+      const res = await api.get('/admin/settings/video-source');
+      setVideoSource(res.data.videoSource || 'youtube');
+    } catch (error) {
+      console.error('Failed to load video source:', error);
+    }
+  };
+
+  const loadVideoVolume = async () => {
+    try {
+      const res = await api.get('/admin/settings/video-volume');
+      const value = res.data.videoVolumePercent;
+      if (typeof value === 'number' && !Number.isNaN(value)) {
+        setVideoVolume(String(Math.max(0, Math.min(100, value))));
       }
     } catch (error) {
-      console.error('Failed to load video folder path:', error);
+      console.error('Failed to load video volume:', error);
+    }
+  };
+
+  const loadYoutubePlaylist = async () => {
+    try {
+      const res = await api.get('/admin/settings/youtube-playlist');
+      const urls = res.data.urls || [];
+      setYoutubeUrls(urls.join('\n'));
+    } catch (error) {
+      console.error('Failed to load YouTube playlist:', error);
+    }
+  };
+
+  const handleSaveVideoSource = async (source) => {
+    setSavingVideoSource(true);
+    try {
+      await api.post('/admin/settings/video-source', { videoSource: source });
+      setVideoSource(source);
+      toastSuccess('Video source updated successfully!');
+    } catch (error) {
+      toastError(error.response?.data?.error || 'Failed to save video source');
+    } finally {
+      setSavingVideoSource(false);
+    }
+  };
+
+  const handleSaveYoutubePlaylist = async (e) => {
+    e.preventDefault();
+    const urls = youtubeUrls
+      .split('\n')
+      .map((u) => u.trim())
+      .filter((u) => u);
+    setSavingYoutubePlaylist(true);
+    try {
+      await api.post('/admin/settings/youtube-playlist', { urls });
+      toastSuccess('YouTube playlist saved!');
+    } catch (error) {
+      toastError(error.response?.data?.error || 'Failed to save playlist');
+    } finally {
+      setSavingYoutubePlaylist(false);
     }
   };
 
@@ -2886,27 +2942,6 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
       },
       onCancel: () => setDingConfirmDialog({ open: false }),
     });
-  };
-
-  const handleSaveVideoFolder = async (e) => {
-    e.preventDefault();
-    if (!videoFolderPath.trim()) {
-      toastError('Video folder path cannot be empty');
-      return;
-    }
-
-    setSavingVideoFolder(true);
-    try {
-      await api.post('/admin/settings/video-folder', {
-        videoFolderPath: videoFolderPath.trim(),
-      });
-      toastSuccess('Video folder path updated successfully!');
-    } catch (error) {
-      console.error('Failed to save video folder path:', error);
-      toastError(error.response?.data?.error || 'Failed to save video folder path');
-    } finally {
-      setSavingVideoFolder(false);
-    }
   };
 
   const handlePreviewVoice = async (rowVoiceId) => {
@@ -3329,6 +3364,7 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
       {/* VIDEOS TAB */}
       {settingsView === 'videos' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Video source selection */}
           <div style={{
             background: 'white',
             borderRadius: '12px',
@@ -3336,68 +3372,191 @@ function ReportsTab({ reports, filters, setFilters, staff, categories, showFilte
             boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
             borderTop: '3px solid #6366f1',
           }}>
-        <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
-          Video Folder Path
-        </h3>
-        <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '24px' }}>
-          Configure the local folder path where video files are stored. The system will scan this folder for video files (mp4, webm, ogg, mov, avi) to play on the public monitoring page.
-        </p>
-
-        <form onSubmit={handleSaveVideoFolder}>
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontSize: '14px',
-              fontWeight: '500',
-            }}>
-              Video Folder Path
-            </label>
-            <input
-              type="text"
-              value={videoFolderPath}
-              onChange={(e) => setVideoFolderPath(e.target.value)}
-              placeholder="C:\\Users\\username\\videos or /Users/username/videos or videos"
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                border: '2px solid #e2e8f0',
-                fontSize: '14px',
-                fontFamily: 'monospace',
-                backgroundColor: '#f8fafc',
-                color: '#1e293b',
-                transition: 'all 0.2s',
-                boxSizing: 'border-box',
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = '#2563eb';
-                e.target.style.backgroundColor = '#ffffff';
-                e.target.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = '#e2e8f0';
-                e.target.style.backgroundColor = '#f8fafc';
-                e.target.style.boxShadow = 'none';
-              }}
-            />
-            <p style={{ 
-              fontSize: '12px', 
-              color: '#64748b', 
-              marginTop: '8px',
-              marginBottom: 0,
-            }}>
-              Enter an absolute path (Windows: <code style={{ fontFamily: 'monospace', fontSize: '11px', background: '#f1f5f9', padding: '2px 4px', borderRadius: '4px' }}>C:\Users\username\videos</code> or Mac/Linux: <code style={{ fontFamily: 'monospace', fontSize: '11px', background: '#f1f5f9', padding: '2px 4px', borderRadius: '4px' }}>/Users/username/videos</code>) or a relative path from the backend directory (e.g., <code style={{ fontFamily: 'monospace', fontSize: '11px', background: '#f1f5f9', padding: '2px 4px', borderRadius: '4px' }}>videos</code>)
+            <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
+              Video Source
+            </h3>
+            <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '20px' }}>
+              <strong>YouTube</strong> plays videos from a playlist you define. <strong>Local</strong> lets the display pick a folder on that computer.
             </p>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '12px 20px',
+                border: `2px solid ${videoSource === 'youtube' ? '#6366f1' : '#e2e8f0'}`,
+                borderRadius: '8px',
+                cursor: 'pointer',
+                backgroundColor: videoSource === 'youtube' ? '#eef2ff' : 'transparent',
+              }}>
+                <input
+                  type="radio"
+                  name="videoSource"
+                  value="youtube"
+                  checked={videoSource === 'youtube'}
+                  onChange={() => handleSaveVideoSource('youtube')}
+                  disabled={savingVideoSource}
+                />
+                <span><strong>YouTube</strong> – Playlist from admin-defined URLs</span>
+              </label>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '12px 20px',
+                border: `2px solid ${videoSource === 'local' ? '#6366f1' : '#e2e8f0'}`,
+                borderRadius: '8px',
+                cursor: 'pointer',
+                backgroundColor: videoSource === 'local' ? '#eef2ff' : 'transparent',
+              }}>
+                <input
+                  type="radio"
+                  name="videoSource"
+                  value="local"
+                  checked={videoSource === 'local'}
+                  onChange={() => handleSaveVideoSource('local')}
+                  disabled={savingVideoSource}
+                />
+                <span><strong>Local</strong> – Folder on the display computer</span>
+              </label>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <Button type="submit" disabled={savingVideoFolder || !videoFolderPath.trim()}>
-              {savingVideoFolder ? 'Saving...' : 'Save Video Folder Path'}
-            </Button>
+          {/* Default video volume */}
+          <div style={{
+            background: 'white',
+            borderRadius: '12px',
+            padding: '24px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            borderTop: '3px solid #0ea5e9',
+          }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px' }}>
+              Default video volume
+            </h3>
+            <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '16px' }}>
+              Set the default playback volume for monitor videos (0 to 100%). This is applied when the monitor page starts.
+            </p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const num = Number(videoVolume);
+                if (!Number.isFinite(num) || num < 0 || num > 100) {
+                  toastError('Volume must be a number between 0 and 100.');
+                  return;
+                }
+                setSavingVideoVolume(true);
+                try {
+                  await api.post('/admin/settings/video-volume', {
+                    videoVolumePercent: num,
+                  });
+                  setVideoVolume(String(Math.round(num)));
+                  toastSuccess('Default video volume saved.');
+                } catch (error) {
+                  toastError(error.response?.data?.error || 'Failed to save video volume');
+                } finally {
+                  setSavingVideoVolume(false);
+                }
+              }}
+              style={{ maxWidth: '260px', display: 'flex', flexDirection: 'column', gap: '8px' }}
+            >
+              <label style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>
+                Volume (0–100%)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={videoVolume}
+                onChange={(e) => setVideoVolume(e.target.value.replace(/[^\d]/g, '').slice(0, 3))}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '2px solid #e2e8f0',
+                  fontSize: '14px',
+                }}
+              />
+              <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                Example: 0 = muted, 50 = half volume, 100 = full volume.
+              </div>
+              <div style={{ marginTop: '8px' }}>
+                <Button type="submit" disabled={savingVideoVolume}>
+                  {savingVideoVolume ? 'Saving...' : 'Save volume'}
+                </Button>
+              </div>
+            </form>
           </div>
-        </form>
-          </div>
+
+          {/* YouTube playlist */}
+          {videoSource === 'youtube' && (
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '24px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              borderTop: '3px solid #6366f1',
+            }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
+                YouTube Playlist
+              </h3>
+              <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '24px' }}>
+                List YouTube URLs (one per line). Videos play in order on the monitor. Supports youtube.com/watch?v= and youtu.be/ links.
+              </p>
+              <form onSubmit={handleSaveYoutubePlaylist}>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>
+                    YouTube URLs
+                  </label>
+                  <textarea
+                    value={youtubeUrls}
+                    onChange={(e) => setYoutubeUrls(e.target.value)}
+                    placeholder="https://www.youtube.com/watch?v=VIDEO_ID&#10;https://youtu.be/VIDEO_ID"
+                    rows={8}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      borderRadius: '8px',
+                      border: '2px solid #e2e8f0',
+                      fontSize: '14px',
+                      fontFamily: 'monospace',
+                      backgroundColor: '#f8fafc',
+                      color: '#1e293b',
+                      resize: 'vertical',
+                      boxSizing: 'border-box',
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#2563eb';
+                      e.target.style.backgroundColor = '#ffffff';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#e2e8f0';
+                      e.target.style.backgroundColor = '#f8fafc';
+                    }}
+                  />
+                </div>
+                <Button type="submit" disabled={savingYoutubePlaylist}>
+                  {savingYoutubePlaylist ? 'Saving...' : 'Save Playlist'}
+                </Button>
+              </form>
+            </div>
+          )}
+
+          {videoSource === 'local' && (
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '24px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              borderLeft: '4px solid #22c55e',
+            }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px' }}>
+                Local videos
+              </h3>
+              <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>
+                When the monitoring page loads, the user will select a folder containing video files. Videos play directly from that computer. Works in Chrome and Edge.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

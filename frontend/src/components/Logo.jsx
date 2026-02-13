@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../utils/api';
 
-export default function Logo({ size = 'medium', showText = true }) {
+export default function Logo({ size = 'medium', showText = true, gap = '12px' }) {
   const [logoUrl, setLogoUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
@@ -45,6 +45,7 @@ export default function Logo({ size = 'medium', showText = true }) {
     small: { width: '80px', height: '40px' },
     medium: { width: '120px', height: '60px' },
     large: { width: '180px', height: '90px' },
+    monitor: { width: '88px', height: '80px' }, // slightly smaller for public monitor overlay
   };
 
   const sizeStyle = sizes[size] || sizes.medium;
@@ -57,7 +58,7 @@ export default function Logo({ size = 'medium', showText = true }) {
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      gap: '12px',
+      gap,
     }}>
       {logoUrl && !imageError ? (
         <img

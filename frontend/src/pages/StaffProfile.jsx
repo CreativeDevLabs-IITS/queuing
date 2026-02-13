@@ -366,7 +366,7 @@ export default function StaffProfile() {
             <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '12px' }}>
               {currentWindow ? `You are currently at ${currentWindow.label}.` : 'You are not assigned to a window yet.'}
             </p>
-            <form onSubmit={handleSwitchWindow} style={{ display: 'flex', flexDirection: 'row', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap', maxWidth: '420px' }}>
+            <form onSubmit={handleSwitchWindow} style={{ display: 'flex', flexDirection: 'row', gap: '12px', alignItems: 'center', flexWrap: 'wrap', maxWidth: '420px' }}>
               <div style={{ flex: '1 1 200px' }}>
                 <Select
                   label="Switch to window"
@@ -383,7 +383,11 @@ export default function StaffProfile() {
                 type="submit"
                 icon={Monitor}
                 disabled={switchingWindow || !selectedWindowId || selectedWindowId === currentWindow?.id}
-                style={{ flexShrink: 0 }}
+                fullWidth
+                style={{
+                  flex: '1 1 200px',
+                  padding: '12px 20px',
+                }}
               >
                 {switchingWindow ? 'Switching...' : 'Switch window'}
               </Button>

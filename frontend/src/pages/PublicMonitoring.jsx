@@ -11,7 +11,13 @@ export default function PublicMonitoring() {
   const [currentVideo, setCurrentVideo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [videoError, setVideoError] = useState(false);
+  const [videoSource, setVideoSource] = useState('youtube');
+  const [localFolderError, setLocalFolderError] = useState(null);
   const videoRef = useRef(null);
+  const youtubePlayerRef = useRef(null);
+  const youtubeContainerRef = useRef(null);
+  const videosRef = useRef([]);
+  videosRef.current = videos;
   const previousWindowsRef = useRef([]);
   const hasAnnouncedOnceRef = useRef(false);
   const announcementQueueRef = useRef([]);
@@ -19,10 +25,13 @@ export default function PublicMonitoring() {
   const lastAnnouncedKeyRef = useRef(null);
   const lastAnnouncedTimeRef = useRef(0);
   const COLLISION_WINDOW_MS = 8000;
+  const DEFAULT_VIDEO_VOLUME = 0.5;
   const [dingSoundUrl, setDingSoundUrl] = useState(null);
   const dingSoundUrlRef = useRef(null);
   const audioUnlockedRef = useRef(false);
   const audioContextRef = useRef(null);
+  const [showUnlockOverlay, setShowUnlockOverlay] = useState(false);
+  const [videoVolumePercent, setVideoVolumePercent] = useState(50); // 0–100 default
 
   useEffect(() => {
     loadData();
@@ -32,7 +41,21 @@ export default function PublicMonitoring() {
   }, []);
 
   useEffect(() => {
-    loadVideos();
+    loadVideoSourceAndVideos();
+  }, []);
+
+  useEffect(() => {
+    if (videos.length > 0 && !audioUnlockedRef.current) {
+      setShowUnlockOverlay(true);
+    }
+  }, [videos]);
+
+  const unlockAudioRef = useRef(null);
+
+  useEffect(() => {
+    const handleKeyDown = () => unlockAudioRef.current?.();
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   useEffect(() => {
@@ -41,41 +64,124 @@ export default function PublicMonitoring() {
     }
   }, [videos, currentVideo]);
 
+  // Revoke blob URLs on unmount to prevent memory leaks
   useEffect(() => {
-    if (videoRef.current && currentVideo) {
-      const video = videoRef.current;
-      
-      const handleEnded = () => {
-        // Find next video or loop back
-        const currentIndex = videos.findIndex(v => v.url === currentVideo.url);
-        const nextIndex = (currentIndex + 1) % videos.length;
-        setCurrentVideo(videos[nextIndex]);
-      };
+    return () => {
+      videos.forEach((v) => {
+        if (v._blobUrl && v.url) URL.revokeObjectURL(v.url);
+      });
+    };
+  }, [videos]);
 
-      video.addEventListener('ended', handleEnded);
-      video.volume = 1.0;
-      video.load();
+  // Local video element: handle ended, autoplay
+  useEffect(() => {
+    if (videoSource !== 'local' || !videoRef.current || !currentVideo) return;
+    const video = videoRef.current;
 
-      // Try to autoplay with sound, fallback to muted autoplay
-      const playPromise = video.play();
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            // Autoplay started successfully, try to unmute
-            video.muted = false;
-          })
-          .catch(() => {
-            // Autoplay was prevented, play muted instead
-            video.muted = true;
-            video.play().catch(console.error);
-          });
-      }
+    const handleEnded = () => {
+      const currentIndex = videos.findIndex((v) => v.url === currentVideo.url);
+      const nextIndex = (currentIndex + 1) % videos.length;
+      setCurrentVideo(videos[nextIndex]);
+    };
 
-      return () => {
-        video.removeEventListener('ended', handleEnded);
-      };
+    video.addEventListener('ended', handleEnded);
+    video.volume = DEFAULT_VIDEO_VOLUME;
+    video.load();
+
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => { video.muted = false; })
+        .catch(() => {
+          video.muted = true;
+          video.play().catch(console.error);
+        });
     }
-  }, [currentVideo, videos]);
+
+    return () => video.removeEventListener('ended', handleEnded);
+  }, [currentVideo, videos, videoSource]);
+
+  // YouTube: load IFrame API and create/update player
+  useEffect(() => {
+    if (videoSource !== 'youtube' || !currentVideo?.id) return;
+
+    const createOrUpdatePlayer = (videoId) => {
+      if (youtubePlayerRef.current) {
+        youtubePlayerRef.current.loadVideoById(videoId);
+        const volumeScalar = Math.max(0, Math.min(100, videoVolumePercent)) / 100;
+        youtubePlayerRef.current.setVolume(Math.round(volumeScalar * 100));
+        return;
+      }
+      const container = youtubeContainerRef.current;
+      if (!container) return;
+      const div = document.createElement('div');
+      div.id = 'youtube-player-' + Date.now();
+      container.innerHTML = '';
+      container.appendChild(div);
+
+      youtubePlayerRef.current = new window.YT.Player(div.id, {
+        videoId,
+        width: '100%',
+        height: '100%',
+        playerVars: {
+          autoplay: 1,
+          mute: 1,
+          rel: 0,
+          modestbranding: 1,
+        },
+        events: {
+          onReady: (e) => {
+            const volumeScalar = Math.max(0, Math.min(100, videoVolumePercent)) / 100;
+            e.target.setVolume(Math.round(volumeScalar * 100));
+            if (audioUnlockedRef.current) {
+              e.target.unMute();
+            }
+          },
+          onStateChange: (e) => {
+            if (e.data === 0) {
+              const list = videosRef.current;
+              const idx = list.findIndex((v) => v.id === videoId);
+              const next = (idx + 1) % list.length;
+              if (list[next]) setCurrentVideo(list[next]);
+            }
+          },
+        },
+      });
+    };
+
+    if (window.YT?.Player) {
+      createOrUpdatePlayer(currentVideo.id);
+      return () => {};
+    }
+    if (window.YTLoadReady) {
+      window.YT.ready(() => createOrUpdatePlayer(currentVideo.id));
+      return () => {};
+    }
+
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    const firstScript = document.getElementsByTagName('script')[0];
+    firstScript.parentNode.insertBefore(tag, firstScript);
+    const prevReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      window.YTLoadReady = true;
+      if (prevReady) prevReady();
+      createOrUpdatePlayer(currentVideo.id);
+    };
+
+    return () => {};
+  }, [currentVideo, videos, videoSource, videoVolumePercent]);
+
+  // Cleanup YouTube player on unmount
+  useEffect(() => {
+    return () => {
+      if (youtubePlayerRef.current) {
+        try { youtubePlayerRef.current.destroy(); } catch (_) {}
+        youtubePlayerRef.current = null;
+      }
+      if (youtubeContainerRef.current) youtubeContainerRef.current.innerHTML = '';
+    };
+  }, []);
 
   const loadData = async () => {
     try {
@@ -429,6 +535,10 @@ export default function PublicMonitoring() {
   const duckVideoVolume = (volume) => {
     const vid = videoRef.current;
     if (vid) vid.volume = Math.max(0, Math.min(1, volume));
+    const yt = youtubePlayerRef.current;
+    if (yt && typeof yt.setVolume === 'function') {
+      yt.setVolume(Math.round(Math.max(0, Math.min(1, volume)) * 100));
+    }
   };
 
   const fallbackSpeech = (text, resolve) => {
@@ -534,7 +644,7 @@ export default function PublicMonitoring() {
     const { text } = item;
     console.log('Starting announcement:', text);
     try {
-      duckVideoVolume(0.5);
+      duckVideoVolume(0.05);
       console.log('Playing ding...');
       await playDingAsync();
       console.log('Ding finished, playing TTS...');
@@ -544,7 +654,7 @@ export default function PublicMonitoring() {
     } catch (err) {
       console.error('Announcement playback error:', err);
     } finally {
-      duckVideoVolume(1.0);
+      duckVideoVolume(DEFAULT_VIDEO_VOLUME);
       isProcessingAnnouncementRef.current = false;
       if (announcementQueueRef.current.length > 0) {
         processNextAnnouncement();
@@ -614,15 +724,92 @@ export default function PublicMonitoring() {
     }
   };
 
-  const loadVideos = async () => {
+  const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogg', '.mov', '.avi'];
+
+  function extractYoutubeId(url) {
+    if (!url || typeof url !== 'string') return null;
+    const u = url.trim();
+    const m1 = u.match(/[?&]v=([^&]+)/);
+    if (m1) return m1[1];
+    const m2 = u.match(/youtu\.be\/([^?&]+)/);
+    if (m2) return m2[1];
+    const m3 = u.match(/youtube\.com\/embed\/([^?&]+)/);
+    if (m3) return m3[1];
+    return null;
+  }
+
+  const loadVideoSourceAndVideos = async () => {
     try {
-      const res = await api.get('/videos');
-      setVideos(res.data.videos || []);
-      setVideoError(false);
+      const [sourceRes, volumeRes] = await Promise.all([
+        api.get('/admin/settings/video-source'),
+        api.get('/admin/settings/video-volume').catch(() => null),
+      ]);
+      const source = sourceRes.data.videoSource || 'youtube';
+      setVideoSource(source);
+
+      if (volumeRes && typeof volumeRes.data?.videoVolumePercent === 'number') {
+        const v = volumeRes.data.videoVolumePercent;
+        setVideoVolumePercent(Math.max(0, Math.min(100, Math.round(v))));
+      }
+
+      if (source === 'youtube') {
+        const res = await api.get('/admin/settings/youtube-playlist');
+        const urls = res.data.urls || [];
+        const youtubeVideos = urls
+          .map((url) => {
+            const id = extractYoutubeId(url);
+            return id ? { id, url, name: id } : null;
+          })
+          .filter(Boolean);
+        setVideos(youtubeVideos);
+        setVideoError(false);
+        setLocalFolderError(null);
+      } else {
+        setVideos([]);
+        setLocalFolderError(null);
+      }
     } catch (error) {
       console.error('Failed to load videos:', error);
       setVideoError(true);
       setVideos([]);
+    }
+  };
+
+  const pickLocalFolder = async () => {
+    if (!('showDirectoryPicker' in window)) {
+      setLocalFolderError('Not supported in this browser. Use Chrome or Edge.');
+      return;
+    }
+    try {
+      setLocalFolderError(null);
+      const dirHandle = await window.showDirectoryPicker();
+      const localVideos = [];
+      for await (const entry of dirHandle.values()) {
+        if (entry.kind === 'file') {
+          const ext = '.' + (entry.name.split('.').pop() || '').toLowerCase();
+          if (VIDEO_EXTENSIONS.includes(ext)) {
+            const file = await entry.getFile();
+            const url = URL.createObjectURL(file);
+            localVideos.push({
+              filename: entry.name,
+              name: entry.name.replace(/\.[^/.]+$/, ''),
+              url,
+              _blobUrl: true,
+            });
+          }
+        }
+      }
+      if (localVideos.length > 0) {
+        setVideos(localVideos);
+        setVideoError(false);
+      } else {
+        setLocalFolderError('No video files found in that folder.');
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.error('Failed to pick folder:', err);
+        setLocalFolderError(err.message || 'Failed to access folder.');
+      }
     }
   };
 
@@ -633,15 +820,28 @@ export default function PublicMonitoring() {
   const unlockAudio = () => {
     if (audioUnlockedRef.current) return;
     audioUnlockedRef.current = true;
+    setShowUnlockOverlay(false);
     try {
+      const volumeScalar = Math.max(0, Math.min(100, videoVolumePercent)) / 100;
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (Ctx && !audioContextRef.current) {
         const ctx = new Ctx();
         audioContextRef.current = ctx;
         if (ctx.resume) ctx.resume();
       }
+      const yt = youtubePlayerRef.current;
+      if (yt && typeof yt.unMute === 'function') {
+        yt.unMute();
+        yt.setVolume(Math.round(volumeScalar * 100));
+      }
+      const vid = videoRef.current;
+      if (vid) {
+        vid.muted = false;
+        vid.volume = volumeScalar;
+      }
     } catch (_) {}
   };
+  unlockAudioRef.current = unlockAudio;
 
   return (
     <div
@@ -649,128 +849,239 @@ export default function PublicMonitoring() {
         height: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        background: '#f8fafc',
+        background: '#0f172a',
         overflow: 'hidden',
       }}
       onClick={unlockAudio}
       onTouchStart={unlockAudio}
       role="presentation"
     >
-      {/* Top half: header + cards (scrollable if needed) */}
-      <div style={{
-        flex: '0 0 50vh',
-        minHeight: 0,
-        overflowY: 'auto',
-      }}>
-        <div style={{
-          padding: '20px',
-          maxWidth: '1400px',
-          margin: '0 auto',
-        }}>
-          {/* Navbar with Logo and Title */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '16px',
-            padding: '8px 0',
-          }}>
-            <Logo size="large" />
-            <h1 style={{
-              fontSize: '28px',
-              fontWeight: '700',
-              color: '#1e293b',
-              margin: 0,
-            }}>
-              Queue Monitoring
-            </h1>
-          </div>
-
-          {loading ? (
-            <Loading />
-          ) : (
-            <div style={{
-              display: 'grid',
-              gap: '16px',
-              marginBottom: '24px',
-            }}
-            className="grid-responsive">
-              {windows.length > 0 ? (
-                windows.map((window) => (
-                  <WindowCard key={window.id} window={window} />
-                ))
-              ) : (
-                <div style={{
-                  gridColumn: '1 / -1',
-                  textAlign: 'center',
-                  padding: '40px',
-                  background: 'white',
-                  borderRadius: '12px',
-                  color: '#64748b',
-                }}>
-                  No active windows at the moment
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Bottom half: video player (stuck at bottom, exactly 50vh) */}
-      <div style={{
-        flex: '0 0 50vh',
-        minHeight: 0,
-        background: '#1e293b',
-        display: 'flex',
-        flexDirection: 'column',
-      }}>
-        {videos.length > 0 && !videoError ? (
-          <div style={{
-            flex: 1,
-            minHeight: 0,
-            position: 'relative',
-            background: '#000',
-          }}>
-            <video
-              ref={videoRef}
-              src={currentVideo?.url}
-              controls
-              autoPlay
-              muted
-              playsInline
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'contain',
-              }}
-            />
-          </div>
-        ) : (
-          <div style={{
-            flex: 1,
+      {showUnlockOverlay && videos.length > 0 && (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={unlockAudio}
+          onKeyDown={(e) => { e.key !== 'Tab' && unlockAudio(); }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0,0,0,0.7)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '60px 40px',
-            textAlign: 'center',
-          }}>
-            <div style={{
-              color: '#94a3b8',
-              fontSize: '18px',
-              fontWeight: '500',
-              marginBottom: '8px',
-            }}>
-              No video playlist set yet
+            gap: '16px',
+            cursor: 'pointer',
+          }}
+        >
+          <div style={{ color: '#e5e7eb', fontSize: '24px', fontWeight: 600, textAlign: 'center', padding: '0 24px' }}>
+            Press any key or tap to start
+          </div>
+          <div style={{ color: '#9ca3af', fontSize: '16px', textAlign: 'center', padding: '0 24px' }}>
+            Use your remote&apos;s OK/Enter button, or tap the screen
+          </div>
+        </div>
+      )}
+      {/* Main content: left video (75%) + right stacked cards (25%) */}
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          minHeight: 0,
+        }}
+      >
+        {/* Left: Video with overlaid logo/title */}
+        <div
+          style={{
+            flex: 3,
+            minWidth: 0,
+            background: '#000',
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {/* Overlayed logo + title (no background, tight to logo) */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 16,
+              left: 16,
+              zIndex: 10,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0,
+              pointerEvents: 'none',
+            }}
+          >
+            <div>
+              <Logo size="monitor" showText={false} gap="0px" />
             </div>
-            <div style={{
-              color: '#64748b',
-              fontSize: '14px',
-            }}>
-              Please configure the video folder path in the admin settings
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                lineHeight: 1.1,
+                marginLeft: 0,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: '18px',
+                  fontWeight: 700,
+                  color: '#e5e7eb',
+                  textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Hilongos Treasury Office
+              </span>
+              <span
+                style={{
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: '#e5e7eb',
+                  textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Queue Monitoring
+              </span>
             </div>
           </div>
-        )}
+
+          {videos.length > 0 && !videoError ? (
+            videoSource === 'youtube' ? (
+              <div
+                ref={youtubeContainerRef}
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  height: '100%',
+                }}
+              />
+            ) : (
+              <video
+                ref={videoRef}
+                src={currentVideo?.url}
+                controls
+                autoPlay
+                muted
+                playsInline
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                }}
+              />
+            )
+          ) : (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '40px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '16px',
+              }}
+            >
+              <div
+                style={{
+                  color: '#9ca3af',
+                  fontSize: '22px',
+                  fontWeight: 600,
+                  marginBottom: '8px',
+                }}
+              >
+                {videoSource === 'local' ? 'Select a video folder' : 'No YouTube playlist configured'}
+              </div>
+              <div
+                style={{
+                  color: '#6b7280',
+                  fontSize: '16px',
+                }}
+              >
+                {videoSource === 'local'
+                  ? 'Choose a folder on this computer containing video files (mp4, webm, ogg, mov, avi).'
+                  : 'Add YouTube URLs in Admin → Settings → Videos.'}
+              </div>
+              {videoSource === 'local' && localFolderError && (
+                <div style={{ color: '#ef4444', fontSize: '14px' }}>{localFolderError}</div>
+              )}
+              {videoSource === 'local' && (
+                <button
+                  type="button"
+                  onClick={pickLocalFolder}
+                  style={{
+                    padding: '12px 24px',
+                    fontSize: '16px',
+                    fontWeight: 600,
+                    color: 'white',
+                    background: '#6366f1',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Select folder
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Right: Window cards stacked */}
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            borderLeft: '1px solid #1f2937',
+            background: '#020617',
+            padding: '12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            overflowY: 'auto',
+          }}
+        >
+          {/* Only show windows with an active assigned staff */}
+          {loading ? (
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Loading />
+            </div>
+          ) : windows.filter((w) => w.staff).length > 0 ? (
+            windows
+              .filter((w) => w.staff)
+              .map((window) => (
+                <WindowCard key={window.id} window={window} />
+              ))
+          ) : (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '24px 16px',
+                background: '#0b1120',
+                borderRadius: '12px',
+                color: '#64748b',
+                border: '1px solid #1f2937',
+              }}
+            >
+              No active windows at the moment
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

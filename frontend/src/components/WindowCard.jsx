@@ -39,25 +39,24 @@ export default function WindowCard({ window }) {
   return (
     <div
       style={{
-        background: 'white',
+        background: '#0b1120',
         borderRadius: '12px',
-        padding: '20px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        border: '2px solid #e2e8f0',
+        padding: 0,
+        boxShadow: '0 4px 12px rgba(15,23,42,0.6)',
+        border: '1px solid #1e293b',
         transition: 'all 0.2s',
         display: 'flex',
         alignItems: 'stretch',
-        gap: '20px',
-        minHeight: '180px',
+        minHeight: '96px',
+        overflow: 'hidden',
       }}
     >
       {/* Left: Staff profile picture (~35–40% width) */}
       <div
         style={{
-          flex: '0 0 38%',
-          maxWidth: '200px',
+          flex: '0 0 34%',
+          maxWidth: '110px',
           borderRadius: '12px',
-          overflow: 'hidden',
           background: staff?.profilePicture
             ? undefined
             : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -82,7 +81,7 @@ export default function WindowCard({ window }) {
             style={{
               color: 'white',
               fontWeight: '700',
-              fontSize: '32px',
+              fontSize: '24px',
             }}
           >
             {getInitials(staffName)}
@@ -97,15 +96,19 @@ export default function WindowCard({ window }) {
           display: 'flex',
           flexDirection: 'column',
           minWidth: 0,
+          padding: '6px 8px 6px 8px',
         }}
       >
         {/* Staff name */}
         <div
           style={{
-            fontSize: '26px',
+            fontSize: '14px',
             fontWeight: '700',
-            color: '#1e293b',
-            marginBottom: '4px',
+            color: '#e5e7eb',
+            marginBottom: '2px',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }}
         >
           {staffName}
@@ -115,21 +118,24 @@ export default function WindowCard({ window }) {
           <>
             <div
               style={{
-                fontSize: '22px',
+                fontSize: '11px',
                 fontWeight: '700',
-                color: '#1e293b',
-                marginBottom: '8px',
+                color: '#cbd5f5',
+                marginBottom: '4px',
               }}
             >
               is now serving:
             </div>
             <div
               style={{
-                fontSize: 'clamp(48px, 8vw, 84px)',
+                fontSize: 'clamp(22px, 2.8vw, 34px)',
                 fontWeight: '700',
-                color: '#1e293b',
-                lineHeight: 1.1,
-                marginBottom: '8px',
+                color: '#fbbf24',
+                lineHeight: 1.05,
+                marginBottom: '4px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
               }}
             >
               {queueDisplay}
@@ -137,10 +143,12 @@ export default function WindowCard({ window }) {
             {clientLine && (
               <div
                 style={{
-                  fontSize: '18px',
+                  fontSize: '11px',
                   fontWeight: '600',
-                  color: '#475569',
-                  marginBottom: '8px',
+                  color: '#cbd5f5',
+                  marginBottom: '4px',
+                  maxHeight: '2.6em',
+                  overflow: 'hidden',
                 }}
               >
                 {clientLine}
@@ -150,9 +158,9 @@ export default function WindowCard({ window }) {
         ) : (
           <div
             style={{
-              fontSize: '18px',
+              fontSize: '11px',
               fontWeight: '600',
-              color: '#94a3b8',
+              color: '#64748b',
               fontStyle: 'italic',
             }}
           >
@@ -164,10 +172,13 @@ export default function WindowCard({ window }) {
         <div
           style={{
             marginTop: 'auto',
-            paddingTop: '12px',
-            fontSize: '32px',
+            paddingTop: '2px',
+            fontSize: '15px',
             fontWeight: '700',
-            color: '#1e293b',
+            color: '#38bdf8',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }}
         >
           {label}
