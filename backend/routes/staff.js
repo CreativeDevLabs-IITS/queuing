@@ -221,13 +221,17 @@ router.post('/assign-window', async (req, res) => {
       return res.status(401).json({ error: 'Staff account no longer exists' });
     }
 
-    // Deactivate current assignments
-    await prisma.windowAssignment.updateMany({
+    // Deactivate current assignments.
+    // NOTE: On some existing databases the unique constraint
+    // (staffId, windowId, isActive) can cause a conflict if we
+    // flip isActive from true -> false (because a historical
+    // inactive row may already exist). To avoid P2002, we simply
+    // delete active assignments instead of toggling the flag.
+    await prisma.windowAssignment.deleteMany({
       where: {
         staffId,
         isActive: true,
       },
-      data: { isActive: false },
     });
 
     // If windowId is null, just deactivate (logout scenario)

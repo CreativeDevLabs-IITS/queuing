@@ -414,33 +414,34 @@ sudo systemctl restart apache2
 
 #### 8.3 Create `.htaccess` File
 
+Put `.htaccess` in the **document root** of your domain (the folder from which the site is served). For example if the domain points to `~/public_html/clients/kyuwing`, create or edit `.htaccess` there, not only in `~/public_html`.
+
 ```bash
-cd ~/public_html
+cd ~/public_html   # or e.g. ~/public_html/clients/kyuwing for a per-site root
 nano .htaccess
 ```
 
-Add the following:
+Add the following (use `127.0.0.1` instead of `localhost` if your host resolves localhost differently). **The opening tag must be `<IfModule` (with the `<`) — missing it can break the whole block.**
 
 ```apache
 <IfModule mod_rewrite.c>
-  RewriteEngine On
+    RewriteEngine On
+    RewriteBase /
 
-  # Proxy API requests to backend
-  RewriteCond %{REQUEST_URI} ^/api/(.*)$
-  RewriteRule ^api/(.*)$ http://localhost:5002/api/$1 [P,L]
+    # Proxy /api to backend (all methods: GET, POST, etc.)
+    RewriteCond %{REQUEST_URI} ^/api
+    RewriteRule ^api/(.*)$ http://127.0.0.1:5002/api/$1 [P,L]
 
-  # Proxy upload requests
-  RewriteCond %{REQUEST_URI} ^/uploads/(.*)$
-  RewriteRule ^uploads/(.*)$ http://localhost:5002/uploads/$1 [P,L]
+    # Proxy /uploads and /videos
+    RewriteCond %{REQUEST_URI} ^/uploads
+    RewriteRule ^uploads/(.*)$ http://127.0.0.1:5002/uploads/$1 [P,L]
+    RewriteCond %{REQUEST_URI} ^/videos
+    RewriteRule ^videos/(.*)$ http://127.0.0.1:5002/videos/$1 [P,L]
 
-  # Proxy video requests
-  RewriteCond %{REQUEST_URI} ^/videos/(.*)$
-  RewriteRule ^videos/(.*)$ http://localhost:5002/videos/$1 [P,L]
-
-  # React Router (SPA) - serve index.html for all routes
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteRule . /index.html [L]
+    # SPA: if not a real file or directory, serve index.html
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.html [L]
 </IfModule>
 ```
 
@@ -635,6 +636,162 @@ Add:
 
 ---
 
+## Redeploy from scratch (clone + local build + upload DB)
+
+Use this path when you want a clean deploy with the repo under `public_html/clients/kyuwing`, frontend built locally, and the database uploaded instead of running `prisma migrate deploy` on the server.
+
+### R1. Clone the repo on the server
+
+```bash
+cd ~/public_html/clients
+# Remove existing site if you want a clean slate (back up first if needed)
+# rm -rf kyuwing
+git clone https://github.com/YOUR_USERNAME/queing.git kyuwing
+cd kyuwing
+```
+
+Replace the clone URL with your actual repo URL. You now have the full repo at `~/public_html/clients/kyuwing/` (frontend and backend folders inside).
+
+### R2. Frontend: build locally and upload
+
+On your **local machine**:
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+Then upload only the built files to the server (not the whole `frontend/` folder):
+
+```bash
+# From repo root on your machine (replace qozlgarl and server with your SSH user/host)
+scp frontend/dist/index.html qozlgarl@your-server:~/public_html/clients/kyuwing/
+scp -r frontend/dist/assets qozlgarl@your-server:~/public_html/clients/kyuwing/
+```
+
+So on the server, `~/public_html/clients/kyuwing/` contains at least: `index.html`, `assets/`, plus the rest of the repo (e.g. `backend/`, `frontend/` source). The site is served from that folder.
+
+### R3. Upload the database (skip migrate on server)
+
+On your **local machine**, upload the SQLite DB so you don’t run `prisma migrate deploy` on the server (which can overload it):
+
+```bash
+# From repo root locally
+scp backend/prisma/dev.db qozlgarl@your-server:~/public_html/clients/kyuwing/backend/prisma/
+```
+
+Ensure the backend folder exists on the server (it will if you cloned the repo in R1).
+
+### R4. Backend setup on the server
+
+SSH into the server, then:
+
+```bash
+cd ~/public_html/clients/kyuwing/backend
+npm install --production
+```
+
+If you get Prisma-related errors, run `npm install` (with dev deps), then continue.
+
+Create `.env` (if it doesn’t exist):
+
+```bash
+nano .env
+```
+
+Contents (adjust values):
+
+```env
+DATABASE_URL="file:./prisma/dev.db"
+JWT_SECRET="your-secure-secret-from-openssl-rand-base64-32"
+PORT=5002
+NODE_ENV=production
+```
+
+Generate Prisma Client only (no migrate):
+
+```bash
+npx prisma generate
+```
+
+Create required directories:
+
+```bash
+mkdir -p uploads/logos uploads/profiles uploads/sounds videos logs
+chmod 755 uploads videos logs
+chmod 644 .env prisma/dev.db
+```
+
+### R5. PM2
+
+From the repo, the app is started from the **backend** directory. If `ecosystem.config.cjs` is in the backend folder:
+
+```bash
+cd ~/public_html/clients/kyuwing/backend
+pm2 start ecosystem.config.cjs
+pm2 save
+pm2 startup
+```
+
+Run the command that `pm2 startup` prints so the app restarts on reboot.
+
+If your ecosystem file uses a `cwd` path, set it to the backend path, e.g.:
+
+```javascript
+cwd: "/home/qozlgarl/public_html/clients/kyuwing/backend",
+```
+
+Check:
+
+```bash
+pm2 status
+pm2 logs queing-backend
+```
+
+### R6. Reverse proxy (`.htaccess`)
+
+The document root for the site is `~/public_html/clients/kyuwing/`. Put `.htaccess` there:
+
+```bash
+nano ~/public_html/clients/kyuwing/.htaccess
+```
+
+Use the same proxy rules as in Step 8.3 (proxy `/api`, `/uploads`, `/videos` to `http://127.0.0.1:5002`, then SPA fallback). Example:
+
+```apache
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    RewriteCond %{REQUEST_URI} ^/api
+    RewriteRule ^api/(.*)$ http://127.0.0.1:5002/api/$1 [P,L]
+    RewriteCond %{REQUEST_URI} ^/uploads
+    RewriteRule ^uploads/(.*)$ http://127.0.0.1:5002/uploads/$1 [P,L]
+    RewriteCond %{REQUEST_URI} ^/videos
+    RewriteRule ^videos/(.*)$ http://127.0.0.1:5002/videos/$1 [P,L]
+
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.html [L]
+</IfModule>
+```
+
+If the domain’s document root is actually `public_html` (so browser requests to `/api` use `public_html/.htaccess`), add the same proxy block to `~/public_html/.htaccess` as well (see troubleshooting “404 in browser but curl from server works”).
+
+### R7. Verify
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5002/api/health
+# Expect 200
+curl -s -o /dev/null -w "%{http_code}" "https://kyuwing.online/api/health"
+# Expect 200 (or 401 for protected routes without auth)
+```
+
+Open the site in the browser and test admin login and the Video settings tab.
+
+---
+
 ## Troubleshooting
 
 ### Backend Not Starting
@@ -682,6 +839,42 @@ sudo nginx -t
 
 # Check CORS settings in backend/server.js
 ```
+
+### 404 "Cannot POST /api/..." (GET or direct curl works)
+
+If the browser gets **404** with body `Cannot POST /api/...` but **direct** curl to the backend works (e.g. `curl -X POST http://127.0.0.1:5002/api/admin/settings/youtube-playlist` returns 401 or 2xx), the **reverse proxy** is not forwarding POST (or not forwarding to the Node app at all).
+
+1. **Confirm backend is correct** (you already did):
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:5002/api/admin/settings/youtube-playlist -H "Content-Type: application/json" -d '{}'
+   # Expect 401 (unauthorized) or 2xx — not 404
+   ```
+
+2. **Fix the proxy so all methods (GET, POST, etc.) and the full path are forwarded:**
+   - **Nginx:** The `location /api { ... proxy_pass ... }` block forwards the same method and path by default. Ensure there is no other `location` that catches `/api` or strips the path. Reload: `sudo nginx -t && sudo systemctl reload nginx`.
+   - **Apache / .htaccess:**  
+     - Put `.htaccess` in the **document root** of the domain (e.g. if the site is served from `public_html/clients/kyuwing/`, the `.htaccess` must be in that folder, not only in `public_html/`).  
+     - The proxy rule must run for all methods. The usual rule is:
+       ```apache
+       RewriteCond %{REQUEST_URI} ^/api/ [NC]
+       RewriteRule ^api/(.*)$ http://127.0.0.1:5002/api/$1 [P,L]
+       ```
+       Use `127.0.0.1` if `localhost` is not reliable.  
+     - If the host disallows `[P]` (proxy) in `.htaccess`, use cPanel **Reverse Proxy** or ask support to add `ProxyPass /api http://127.0.0.1:5002/api` and `ProxyPassReverse /api http://127.0.0.1:5002/api` in the vhost.
+
+3. **Test through the public URL** (from the server or your machine):
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}" -X POST https://kyuwing.online/api/admin/settings/youtube-playlist -H "Content-Type: application/json" -d '{}'
+   ```
+   You should get **401** or **2xx**, not **404**.
+
+4. **404 in browser but curl from server works:**  
+   Only if the domain’s document root is **`public_html`** (so `/api` is handled by `public_html/.htaccess`), add the same proxy rules there. If the site has been working with `.htaccess` only in a subfolder (e.g. `public_html/clients/kyuwing`), the document root is that subfolder — don’t change `public_html/.htaccess`. Look for other causes: backend not running or wrong port, CDN/cache returning old 404s, or www vs non-www using a different vhost.
+
+5. **404 when using Cloudflare (browser) but curl from server returns 401:**  
+   Browser traffic goes **Browser → Cloudflare → Origin**. Curl from the server may hit the origin **directly** (bypassing Cloudflare). If the origin treats those differently, you get 404 only for browser traffic.  
+   - **SSL/TLS mode:** In Cloudflare → **SSL/TLS** → set to **Full** or **Full (strict)** so Cloudflare connects to the origin over **HTTPS**. With **Flexible**, Cloudflare connects over **HTTP**; the origin’s **HTTP** vhost may not have the same proxy/.htaccess as HTTPS, so `/api` can 404.  
+   - **Bypass test:** In Cloudflare **DNS**, set the record for the domain to **DNS only** (grey cloud) temporarily. Reload the site in the browser. If 404 goes away, the issue is how Cloudflare connects to the origin; fix SSL mode or ensure the HTTP vhost has the proxy. Set the cloud back to **Proxied** (orange) after testing.
 
 ### Database Errors
 

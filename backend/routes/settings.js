@@ -238,69 +238,121 @@ router.delete('/logo', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
-// Get video folder path (admin only)
-router.get('/video-folder', authenticateToken, requireAdmin, async (req, res) => {
+// Get video source (public - used by monitoring page)
+router.get('/video-source', async (req, res) => {
   try {
     const setting = await prisma.settings.findUnique({
-      where: { key: 'video_folder_path' },
+      where: { key: 'video_source' },
     });
-
-    if (setting && setting.value) {
-      res.json({ videoFolderPath: setting.value });
-    } else {
-      // Return default path if not set
-      const defaultPath = path.join(__dirname, '..', 'videos');
-      res.json({ videoFolderPath: defaultPath });
-    }
+    let source = setting?.value || 'youtube';
+    if (source === 'server') source = 'youtube'; // migrate legacy
+    res.json({ videoSource: source });
   } catch (error) {
-    console.error('Get video folder error:', error);
+    console.error('Get video source error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Set video folder path (admin only)
-router.post('/video-folder', authenticateToken, requireAdmin, async (req, res) => {
+// Set video source (admin only)
+router.post('/video-source', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { videoFolderPath } = req.body;
-
-    if (!videoFolderPath || typeof videoFolderPath !== 'string') {
-      return res.status(400).json({ error: 'Video folder path is required' });
+    const { videoSource } = req.body;
+    if (!['local', 'youtube'].includes(videoSource)) {
+      return res.status(400).json({ error: 'Video source must be "local" or "youtube"' });
     }
-
-    // Validate that the path exists and is a directory
-    // Normalize the path first to handle both forward and backslashes
-    let normalizedInput = path.normalize(videoFolderPath);
-    let resolvedPath = normalizedInput;
-    
-    // If it's a relative path, resolve it relative to the backend directory
-    if (!path.isAbsolute(normalizedInput)) {
-      resolvedPath = path.join(__dirname, '..', normalizedInput);
-    }
-
-    // Normalize again after joining to ensure proper path format for the platform
-    resolvedPath = path.normalize(resolvedPath);
-
-    // Check if path exists and is a directory
-    if (!fs.existsSync(resolvedPath)) {
-      return res.status(400).json({ error: 'The specified folder does not exist' });
-    }
-
-    const stats = fs.statSync(resolvedPath);
-    if (!stats.isDirectory()) {
-      return res.status(400).json({ error: 'The specified path is not a directory' });
-    }
-
-    // Store the absolute path
     await prisma.settings.upsert({
-      where: { key: 'video_folder_path' },
-      update: { value: resolvedPath },
-      create: { key: 'video_folder_path', value: resolvedPath },
+      where: { key: 'video_source' },
+      update: { value: videoSource },
+      create: { key: 'video_source', value: videoSource },
     });
-
-    console.log('Video folder path updated successfully:', resolvedPath);
-    res.json({ success: true, videoFolderPath: resolvedPath });
+    res.json({ success: true, videoSource });
   } catch (error) {
-    console.error('Set video folder error:', error);
+    console.error('Set video source error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get default video volume (0–100, public - used by monitoring page)
+router.get('/video-volume', async (req, res) => {
+  try {
+    const setting = await prisma.settings.findUnique({
+      where: { key: 'video_volume_percent' },
+    });
+    let value = 50;
+    if (setting?.value != null) {
+      const parsed = parseInt(String(setting.value), 10);
+      if (!Number.isNaN(parsed)) {
+        value = Math.max(0, Math.min(100, parsed));
+      }
+    }
+    res.json({ videoVolumePercent: value });
+  } catch (error) {
+    console.error('Get video volume error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Set default video volume (admin only)
+router.post('/video-volume', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { videoVolumePercent } = req.body || {};
+    const num = Number(videoVolumePercent);
+    if (!Number.isFinite(num)) {
+      return res.status(400).json({ error: 'Video volume must be a number between 0 and 100.' });
+    }
+    const clamped = Math.max(0, Math.min(100, Math.round(num)));
+    await prisma.settings.upsert({
+      where: { key: 'video_volume_percent' },
+      update: { value: String(clamped) },
+      create: { key: 'video_volume_percent', value: String(clamped) },
+    });
+    res.json({ success: true, videoVolumePercent: clamped });
+  } catch (error) {
+    console.error('Set video volume error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get YouTube playlist (public - used by monitoring page)
+router.get('/youtube-playlist', async (req, res) => {
+  try {
+    const setting = await prisma.settings.findUnique({
+      where: { key: 'youtube_playlist' },
+    });
+    let urls = [];
+    if (setting && setting.value) {
+      try {
+        urls = JSON.parse(setting.value);
+        if (!Array.isArray(urls)) urls = [];
+      } catch (_) {
+        urls = [];
+      }
+    }
+    res.json({ urls: urls.filter((u) => u && typeof u === 'string' && u.trim()) });
+  } catch (error) {
+    console.error('Get YouTube playlist error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Set YouTube playlist (admin only)
+router.post('/youtube-playlist', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { urls } = req.body;
+    if (!Array.isArray(urls)) {
+      return res.status(400).json({ error: 'URLs must be an array' });
+    }
+    const cleaned = urls
+      .map((u) => (typeof u === 'string' ? u.trim() : ''))
+      .filter((u) => u);
+    await prisma.settings.upsert({
+      where: { key: 'youtube_playlist' },
+      update: { value: JSON.stringify(cleaned) },
+      create: { key: 'youtube_playlist', value: JSON.stringify(cleaned) },
+    });
+    res.json({ success: true, urls: cleaned });
+  } catch (error) {
+    console.error('Set YouTube playlist error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
