@@ -2766,7 +2766,7 @@ function SettingsTab({ staffIdleMinutes = 5, onStaffIdleMinutesSaved }) {
   const [savingVideoSource, setSavingVideoSource] = useState(false);
   const [youtubeUrls, setYoutubeUrls] = useState('');
   const [savingYoutubePlaylist, setSavingYoutubePlaylist] = useState(false);
-  const [videoVolume, setVideoVolume] = useState('50'); // percent string 0–100
+  const [videoVolume, setVideoVolume] = useState('5'); // percent string 0–100
   const [savingVideoVolume, setSavingVideoVolume] = useState(false);
 
   // Local tab state for settings subsections

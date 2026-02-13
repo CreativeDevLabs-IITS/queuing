@@ -52,11 +52,13 @@ export default function WindowCard({ window, compact = false }) {
         overflow: 'hidden',
       }}
     >
-      {/* Left: Staff profile picture (~35–40% width) */}
+      {/* Left: Staff profile picture – minHeight 0 + overflow hidden so image never drives card height; card height comes from parent (20vh or flex share) */}
       <div
         style={{
           flex: '0 0 34%',
           maxWidth: '110px',
+          minHeight: 0,
+          overflow: 'hidden',
           borderRadius: '12px',
           background: staff?.profilePicture
             ? undefined
@@ -75,6 +77,7 @@ export default function WindowCard({ window, compact = false }) {
               height: '100%',
               objectFit: 'cover',
               display: 'block',
+              minHeight: 0,
             }}
           />
         ) : (

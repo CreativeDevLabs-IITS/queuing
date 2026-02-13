@@ -25,13 +25,13 @@ export default function PublicMonitoring() {
   const lastAnnouncedKeyRef = useRef(null);
   const lastAnnouncedTimeRef = useRef(0);
   const COLLISION_WINDOW_MS = 8000;
-  const DEFAULT_VIDEO_VOLUME = 0.5;
+  const DEFAULT_VIDEO_VOLUME = 0.05;
   const [dingSoundUrl, setDingSoundUrl] = useState(null);
   const dingSoundUrlRef = useRef(null);
   const audioUnlockedRef = useRef(false);
   const audioContextRef = useRef(null);
   const [showUnlockOverlay, setShowUnlockOverlay] = useState(false);
-  const [videoVolumePercent, setVideoVolumePercent] = useState(50); // 0–100 default
+  const [videoVolumePercent, setVideoVolumePercent] = useState(5); // 0–100 default
 
   useEffect(() => {
     loadData();
@@ -577,7 +577,7 @@ export default function PublicMonitoring() {
           const blob = new Blob([audioData], { type: 'audio/mpeg' });
           const ttsUrl = URL.createObjectURL(blob);
           const audio = new Audio(ttsUrl);
-          audio.volume = 1.0;
+          audio.volume = 1.0; // TTS at 100% by default
 
           const cleanup = () => {
             // Clear audio source first to stop any pending loads
